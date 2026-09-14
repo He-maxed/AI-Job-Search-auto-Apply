@@ -53,3 +53,25 @@ def test_negated_remote_is_not_remote():
 def test_priorities_hybrid_over_remote_over_onsite():
     assert classify_work_mode(job(description="Remote-hybrid team")) == "hybrid"
     assert classify_work_mode(job(location="Remote", description="On-site equipment provided")) == "remote"
+
+
+def test_structured_workplace_type_is_authoritative():
+    assert classify_work_mode(job(extra={"workplaceType": "remote"})) == "remote"
+    assert classify_work_mode(job(extra={"workplaceType": "hybrid"})) == "hybrid"
+    assert classify_work_mode(job(extra={"workplaceType": "on-site"})) == "on_site"
+    assert classify_work_mode(job(extra={"workplaceType": "onsite"})) == "on_site"
+    assert classify_work_mode(job(extra={"workplaceType": "on_site"})) == "on_site"
+
+
+def test_structured_unspecified_is_unknown():
+    assert classify_work_mode(job(extra={"workplaceType": "unspecified"})) == "unknown"
+
+
+def test_structured_wins_over_conflicting_keywords():
+    assert classify_work_mode(job(extra={"workplaceType": "on-site"}, description="Remote role")) == "on_site"
+    assert classify_work_mode(job(extra={"workplaceType": "hybrid"}, description="On-site office")) == "hybrid"
+
+
+def test_keyword_logic_unchanged_without_structured_data():
+    assert classify_work_mode(job(extra=None, description="Fully remote")) == "remote"
+    assert classify_work_mode(job(extra={})) == "unknown"

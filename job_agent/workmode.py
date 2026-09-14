@@ -7,15 +7,34 @@ EXCLUDED_MODES = {"on_site"}
 
 ON_SITE_PATTERNS = ("on-site", "onsite", "on site", "in-office", "in office")
 
+# Structured work mode a source explicitly declares on the posting (e.g.
+# Lever's `workplaceType`). Only these literal values are honored; anything
+# else (or absent) falls through to the keyword logic below.
+STRUCTURED_MODES = {
+    "remote": "remote",
+    "hybrid": "hybrid",
+    "on-site": "on_site",
+    "onsite": "on_site",
+    "on_site": "on_site",
+    "unspecified": "unknown",
+}
+
 
 def classify_work_mode(job: dict[str, Any]) -> str:
     """Work mode strictly from what the posting states. Deterministic, LLM-free.
 
-    A mode is only 'established' when an explicit keyword appears in the
-    source fields (title, location, description) or the source explicitly
-    flagged the job remote. Unspecified postings return 'unknown'. The caller
-    must pass the pre-enrichment job so LLM output can never change the mode.
+    A mode is only 'established' when the source explicitly declares it as
+    structured data (`extra.workplaceType`, e.g. Lever) or an explicit keyword
+    appears in the source fields (title, location, description) or the source
+    explicitly flagged the job remote. Unspecified postings return 'unknown'.
+    The caller must pass the pre-enrichment job so LLM output can never change
+    the mode.
     """
+    extra = job.get("extra")
+    if isinstance(extra, dict):
+        structured = str(extra.get("workplaceType") or "").strip().lower()
+        if structured in STRUCTURED_MODES:
+            return STRUCTURED_MODES[structured]
     text = " ".join(
         str(job.get(key) or "") for key in ("title", "location", "description")
     ).lower()

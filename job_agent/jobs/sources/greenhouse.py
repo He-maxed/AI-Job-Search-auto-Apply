@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import html as html_lib
 import json
-import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -10,22 +8,9 @@ from typing import Any
 
 from job_agent.config import greenhouse_api_url, greenhouse_board
 from job_agent.jobs.base import JobSource, SourceError
+from job_agent.jobs.html import html_to_text
 from job_agent.jobs.model import Job, JobQuery
 from job_agent.jobs.registry import register_source
-
-_BLOCK_RE = re.compile(r"</(?:p|div|li|ul|ol|h[1-6]|tr|section)>|<br\s*/?>", re.IGNORECASE)
-_TAG_RE = re.compile(r"<[^>]+>")
-
-
-def html_to_text(raw: str | None) -> str:
-    """Very small HTML->text converter for job description `content`."""
-    if not raw:
-        return ""
-    text = _BLOCK_RE.sub("\n", raw)
-    text = _TAG_RE.sub("", text)
-    text = html_lib.unescape(text)
-    lines = [line.strip() for line in text.splitlines()]
-    return "\n".join(line for line in lines if line)
 
 
 def _location_name(location: Any) -> str:

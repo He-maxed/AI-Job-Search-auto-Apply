@@ -59,3 +59,11 @@ def greenhouse_board() -> str:
 
 def greenhouse_api_url() -> str:
     return env("GREENHOUSE_API_URL", "https://boards-api.greenhouse.io/v1").rstrip("/")
+
+
+def lever_company() -> str:
+    return env("LEVER_COMPANY")
+
+
+def lever_api_url() -> str:
+    return env("LEVER_API_URL", "https://api.lever.co/v0").rstrip("/")

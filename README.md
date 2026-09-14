@@ -13,8 +13,9 @@ Two independent provider layers, selected by configuration:
 
 - **Job source** — `job_agent/jobs`. Interface `JobSource` emits a normalized
   `Job` model from a `JobQuery`. Adapters live under `job_agent/jobs/sources/`.
-  Current adapters: `jobgpt` (optional), `greenhouse` (public job-board API).
-  Future: Lever, RSS, other legitimate sources.
+  Current adapters: `jobgpt` (optional), `greenhouse` (public job-board API),
+  `lever` (public postings API).
+  Future: RSS, other legitimate sources.
 - **LLM provider** — `job_agent/llm`. Interface `LLMProvider` (`complete(...)`).
   Default `none` (deterministic-only). First-class optional local provider:
   `ollama`. OpenAI-compatible/Gemini/Anthropic can be added later behind the
@@ -39,11 +40,13 @@ copy profile\profile.example.json profile\profile.json
 1. Fill `profile/profile.json` with **facts only**. Do not invent jobs, metrics,
    skills, or dates.
 2. Configure `.env`:
-   - `JOB_SOURCE=jobgpt` or `greenhouse`
+   - `JOB_SOURCE=jobgpt`, `greenhouse`, or `lever`
    - `JOBGPT_API_KEY=...` if using JobGPT (generate at
      https://6figr.com/account → MCP Integrations; never commit it)
    - `GREENHOUSE_BOARD=<board token>` to search Greenhouse's public jobs API
      (token = the slug on `boards.greenhouse.io/<token>`; e.g. `stripe`)
+   - `LEVER_COMPANY=<company slug>` to search Lever's public postings API
+     (slug on `jobs.lever.co/<company>`; no auth required, e.g. `lever`)
    - `LLM_PROVIDER=none` (deterministic) or `ollama` for local AI features
 3. Run:
 
@@ -51,6 +54,7 @@ copy profile\profile.example.json profile\profile.json
 python -m job_agent run
 # or select the source on the command line:
 python -m job_agent run --source greenhouse
+python -m job_agent run --source lever
 ```
 
 Optional LLM feature — structured job analysis via the configured provider:
@@ -79,8 +83,8 @@ and does not depend on OpenCode's model, config, or MCP servers.
 ## Implemented
 
 - Provider-neutral `JobSource` / normalized `Job` + `JobQuery` with registry
-- `jobgpt` adapter (optional) and `greenhouse` adapter (public job-board API,
-  no auth required)
+- `jobgpt` adapter (optional), `greenhouse` adapter (public job-board API,
+  no auth required), and `lever` adapter (public postings API, no auth)
 - End-to-end discovery pipeline: profile → query → source → normalize → dedup
   by stable ID → SQLite persistence (first-seen preserved, stored data merged
   on re-fetch) → optional LLM enrichment → deterministic scoring → fit ranking
@@ -94,7 +98,7 @@ and does not depend on OpenCode's model, config, or MCP servers.
 
 ## Not built yet
 
-- Additional job source adapters (Lever, RSS, …)
+- Additional job source adapters (RSS, …)
 - Resume tailoring, cover letters, application drafting
 - Human APPROVE → submit wiring
 - Outcome analytics
