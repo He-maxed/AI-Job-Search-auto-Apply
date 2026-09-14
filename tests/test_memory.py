@@ -121,6 +121,7 @@ def test_schema_tables_exist(db):
         "applications",
         "application_events",
         "resume_versions",
+        "resume_drafts",
         "interviews",
         "recruiters",
         "referrals",

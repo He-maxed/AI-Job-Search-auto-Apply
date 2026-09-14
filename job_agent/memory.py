@@ -89,6 +89,19 @@ CREATE TABLE IF NOT EXISTS referrals (
     raw_json TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS resume_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT,
+    created_at TEXT NOT NULL,
+    draft_json TEXT NOT NULL,
+    provenance_json TEXT NOT NULL,
+    UNIQUE(job_id, version),
+    FOREIGN KEY (job_id) REFERENCES jobs(id)
+);
 """
 
 
@@ -217,6 +230,89 @@ class Memory:
     def known_job_ids(self) -> set[str]:
         rows = self.conn.execute("SELECT id FROM jobs").fetchall()
         return {row["id"] for row in rows}
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT raw_json FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["raw_json"])
+
+    def get_decision(self, job_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT explanation_json FROM scores WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["explanation_json"])
+
+    def save_resume_draft(
+        self,
+        job_id: str,
+        draft: dict[str, Any],
+        provider: str,
+        model: str | None = None,
+    ) -> int:
+        existing = self.conn.execute(
+            "SELECT MAX(version) AS v FROM resume_drafts WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        version = (existing["v"] or 0) + 1
+        provenance = draft.get("source_claims") or []
+        self.conn.execute(
+            """
+            INSERT INTO resume_drafts (job_id, version, provider, model, created_at, draft_json, provenance_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                version,
+                provider,
+                model,
+                utcnow(),
+                json.dumps(draft, ensure_ascii=False),
+                json.dumps(provenance, ensure_ascii=False),
+            ),
+        )
+        self.conn.commit()
+        return version
+
+    def list_resume_drafts(self, job_id: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT version, provider, model, created_at, draft_json FROM resume_drafts "
+            "WHERE job_id = ? ORDER BY version",
+            (job_id,),
+        ).fetchall()
+        return [
+            {
+                "version": row["version"],
+                "provider": row["provider"],
+                "model": row["model"],
+                "created_at": row["created_at"],
+                "draft": json.loads(row["draft_json"]),
+            }
+            for row in rows
+        ]
+
+    def pick_best_job(self) -> dict[str, Any] | None:
+        """Highest-priority scored job eligible for tailoring (tier A/B, remote/hybrid)."""
+        from job_agent.workmode import PRIMARY_MODES
+
+        rows = self.conn.execute(
+            """
+            SELECT s.job_id AS job_id, s.fit_score AS fit_score, s.priority AS priority,
+                   s.explanation_json AS explanation_json, j.raw_json AS raw_json
+            FROM scores s JOIN jobs j ON j.id = s.job_id
+            ORDER BY s.fit_score DESC, s.priority DESC
+            """
+        ).fetchall()
+        for row in rows:
+            decision = json.loads(row["explanation_json"])
+            if decision.get("tier") not in ("A", "B"):
+                continue
+            job = json.loads(row["raw_json"])
+            if (job.get("workMode") or job.get("work_mode")) not in PRIMARY_MODES:
+                continue
+            return {"job_id": row["job_id"], "job": job, "decision": decision}
+        return None
 
     def close(self) -> None:
         self.conn.close()

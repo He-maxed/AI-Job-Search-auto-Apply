@@ -75,6 +75,24 @@ either `analyze` or `run`. When no LLM is available the app keeps working
 deterministically — analysis never falls back silently to another provider, and
 the LLM may only extract facts explicitly stated in the posting.
 
+Job-specific resume tailoring (draft only, no files, no auto-submit):
+
+```powershell
+python -m job_agent tailor --job-id <stored-job-id>
+# or pick the best eligible (A/B tier, remote/hybrid) stored job:
+python -m job_agent tailor --best
+# optional: --llm provider-name --max-tokens N --db-path path --profile-path path
+```
+
+Tailoring produces a structured JSON draft with full provenance. Every claim
+(highlight, project summary, achievement, publication) points back to the
+profile fact it was derived from; the strict validator rejects invented
+employers, titles, degrees, skills, certifications, publications, and metrics
+before anything is stored. Dates and structural identity fields (roles,
+companies, degrees, institution, project names) are always taken from the
+profile, never from the model. Drafts are versioned in SQLite
+(`resume_drafts`): each run for a job creates the next version.
+
 During `run`, optional LLM analysis enriches each discovered job (skills,
 salary, location, work mode) and that enrichment feeds the deterministic
 scorer. Deterministic guardrails stay authoritative: hard blockers, salary
@@ -102,6 +120,10 @@ and does not depend on OpenCode's model, config, or MCP servers.
 - Provider-neutral `LLMProvider` with `none` default and `ollama` optional
 - Structured job-description analysis (`analyze`) with a strict schema — only
   explicitly-stated facts; deterministic scoring can consume the enriched job
+- Job-specific resume tailoring (`tailor`) with a strict, provenance-backed
+  draft schema — only profile facts may enter a draft, gaps are computed
+  deterministically, versions are stored in SQLite, and drafts are only
+  produced for A/B tier remote/hybrid jobs
 - Deterministic fit score 0–100 with tiers A/B/C/D
 - SQLite memory under `data/job_agent.db` (gitignored)
 - Approval packet preview only — no submit
@@ -110,6 +132,6 @@ and does not depend on OpenCode's model, config, or MCP servers.
 ## Not built yet
 
 - Additional job source adapters (RSS, …)
-- Resume tailoring, cover letters, application drafting
+- Cover letters, other drafting formats, PDF/DOCX export of tailored resumes
 - Human APPROVE → submit wiring
 - Outcome analytics

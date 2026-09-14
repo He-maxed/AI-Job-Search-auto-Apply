@@ -38,6 +38,21 @@ def main(argv: list[str] | None = None) -> int:
     analyze_p.add_argument("--max-tokens", type=int, default=1200, help="Max tokens for the model response")
     analyze_p.add_argument("--score", action="store_true", help="Also run the deterministic scorer on the enriched job")
 
+    tailor_p = sub.add_parser(
+        "tailor",
+        help="Generate a job-specific resume draft from a stored job and the factual profile.",
+    )
+    tailor_p.add_argument("--job-id", default=None, help="Stored job id to tailor (use --best to auto-pick)")
+    tailor_p.add_argument(
+        "--best",
+        action="store_true",
+        help="Pick the best stored A/B tier remote/hybrid job and tailor it",
+    )
+    tailor_p.add_argument("--llm", default=None, help="LLM provider name (default: LLM_PROVIDER env, e.g. ollama)")
+    tailor_p.add_argument("--max-tokens", type=int, default=1600, help="Max tokens for the model response")
+    tailor_p.add_argument("--db-path", default=None, help="Path to the job database")
+    tailor_p.add_argument("--profile-path", default=None, help="Path to the JSON profile")
+
     args = parser.parse_args(argv)
     if args.command == "run":
         from job_agent.pipeline import run
@@ -63,6 +78,10 @@ def main(argv: list[str] | None = None) -> int:
         from job_agent.analysis.cli import run_analyze
 
         return run_analyze(args)
+    if args.command == "tailor":
+        from job_agent.resume.cli import run_tailor
+
+        return run_tailor(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 
