@@ -1,0 +1,54 @@
+{
+  "personal": {
+    "full_name": "",
+    "email": "",
+    "phone": "",
+    "headline": "",
+    "links": {
+      "linkedin": "",
+      "github": "",
+      "portfolio": "",
+      "other": []
+    }
+  },
+  "locations": {
+    "current": "",
+    "willing_to_relocate": false,
+    "preferred": [],
+    "remote_ok": true
+  },
+  "work_authorization": {
+    "countries": [],
+    "requires_sponsorship": null,
+    "notes": ""
+  },
+  "notice_period_days": null,
+  "education": [],
+  "experience": [],
+  "projects": [],
+  "skills": {
+    "languages": [],
+    "frameworks": [],
+    "ml": [],
+    "tools": [],
+    "other": []
+  },
+  "certifications": [],
+  "achievements": [],
+  "preferences": {
+    "target_roles": [],
+    "excluded_roles": [],
+    "excluded_companies": [],
+    "excluded_keywords": [],
+    "employment_types": ["full_time"],
+    "seniority": [],
+    "salary": {
+      "currency": "INR",
+      "min": null,
+      "target": null
+    }
+  },
+  "application": {
+    "notes": ""
+  }
+}

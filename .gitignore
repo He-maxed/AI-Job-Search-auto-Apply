@@ -1,0 +1,27 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+
+# Local secrets and sessions — never commit
+*.session
+*.cookies
+cookies/
+oauth-tokens/
+.mcp-auth/
+
+# Personal data and runtime state
+data/*.db
+data/*.db-journal
+profile/profile.json
+resumes/generated/
+resumes/*.pdf
+resumes/*.doc
+resumes/*.docx
+!resumes/.gitkeep
