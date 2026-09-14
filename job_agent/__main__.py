@@ -16,7 +16,7 @@ def main(argv: list[str] | None = None) -> int:
 
     run_p = sub.add_parser("run", help="Discover, score, and record jobs from the configured source. Does not apply.")
     run_p.add_argument("--limit", type=int, default=20, help="Max jobs per source request (capped at 50)")
-    run_p.add_argument("--source", default=None, help="Job source provider (default: JOB_SOURCE env, e.g. jobgpt)")
+    run_p.add_argument("--source", default=None, help="Job source provider (default: JOB_SOURCE env, e.g. jobgpt, greenhouse)")
 
     analyze_p = sub.add_parser(
         "analyze",

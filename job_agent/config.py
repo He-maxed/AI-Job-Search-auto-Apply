@@ -51,3 +51,11 @@ def jobgpt_api_key() -> str:
 
 def jobgpt_api_url() -> str:
     return env("JOBGPT_API_URL", "https://6figr.com").rstrip("/")
+
+
+def greenhouse_board() -> str:
+    return env("GREENHOUSE_BOARD")
+
+
+def greenhouse_api_url() -> str:
+    return env("GREENHOUSE_API_URL", "https://boards-api.greenhouse.io/v1").rstrip("/")

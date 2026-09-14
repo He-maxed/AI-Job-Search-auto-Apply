@@ -13,8 +13,8 @@ Two independent provider layers, selected by configuration:
 
 - **Job source** — `job_agent/jobs`. Interface `JobSource` emits a normalized
   `Job` model from a `JobQuery`. Adapters live under `job_agent/jobs/sources/`.
-  Current adapter: `jobgpt` (optional). Future: Greenhouse, Lever, RSS, other
-  legitimate sources.
+  Current adapters: `jobgpt` (optional), `greenhouse` (public job-board API).
+  Future: Lever, RSS, other legitimate sources.
 - **LLM provider** — `job_agent/llm`. Interface `LLMProvider` (`complete(...)`).
   Default `none` (deterministic-only). First-class optional local provider:
   `ollama`. OpenAI-compatible/Gemini/Anthropic can be added later behind the
@@ -39,14 +39,18 @@ copy profile\profile.example.json profile\profile.json
 1. Fill `profile/profile.json` with **facts only**. Do not invent jobs, metrics,
    skills, or dates.
 2. Configure `.env`:
-   - `JOB_SOURCE=jobgpt` (the only adapter shipped today)
+   - `JOB_SOURCE=jobgpt` or `greenhouse`
    - `JOBGPT_API_KEY=...` if using JobGPT (generate at
      https://6figr.com/account → MCP Integrations; never commit it)
+   - `GREENHOUSE_BOARD=<board token>` to search Greenhouse's public jobs API
+     (token = the slug on `boards.greenhouse.io/<token>`; e.g. `stripe`)
    - `LLM_PROVIDER=none` (deterministic) or `ollama` for local AI features
 3. Run:
 
 ```powershell
 python -m job_agent run
+# or select the source on the command line:
+python -m job_agent run --source greenhouse
 ```
 
 Optional LLM feature — structured job analysis via the configured provider:
@@ -68,7 +72,8 @@ and does not depend on OpenCode's model, config, or MCP servers.
 ## Implemented
 
 - Provider-neutral `JobSource` / normalized `Job` + `JobQuery` with registry
-- `jobgpt` adapter (optional; can be removed by setting `JOB_SOURCE` elsewhere)
+- `jobgpt` adapter (optional) and `greenhouse` adapter (public job-board API,
+  no auth required)
 - Provider-neutral `LLMProvider` with `none` default and `ollama` optional
 - Structured job-description analysis (`analyze`) with a strict schema — only
   explicitly-stated facts; deterministic scoring can consume the enriched job
@@ -79,7 +84,7 @@ and does not depend on OpenCode's model, config, or MCP servers.
 
 ## Not built yet
 
-- Additional job source adapters (Greenhouse, Lever, RSS, …)
+- Additional job source adapters (Lever, RSS, …)
 - Resume tailoring, cover letters, application drafting
 - Human APPROVE → submit wiring
 - Outcome analytics
