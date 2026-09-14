@@ -9,6 +9,7 @@ PROFILE_PATH = ROOT / "profile" / "profile.json"
 PROFILE_EXAMPLE_PATH = ROOT / "profile" / "profile.example.json"
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "job_agent.db"
+DISCOVERY_CATALOG_PATH = DATA_DIR / "boards.json"
 
 
 def load_dotenv(path: Path | None = None) -> None:
@@ -77,3 +78,38 @@ def lever_company() -> str:
 
 def lever_api_url() -> str:
     return env("LEVER_API_URL", "https://api.lever.co/v0").rstrip("/")
+
+
+def ashby_board() -> str:
+    return env("ASHBY_BOARD")
+
+
+def ashby_api_url() -> str:
+    return env("ASHBY_API_URL", "https://api.ashbyhq.com/posting-api").rstrip("/")
+
+
+def remotive_api_url() -> str:
+    return env("REMOTIVE_API_URL", "https://remotive.com/api").rstrip("/")
+
+
+def jobicy_api_url() -> str:
+    return env("JOBICY_API_URL", "https://jobicy.com/api/v2").rstrip("/")
+
+
+def adzuna_app_id() -> str:
+    return env("ADZUNA_APP_ID")
+
+
+def adzuna_app_key() -> str:
+    return env("ADZUNA_APP_KEY")
+
+
+def adzuna_country() -> str:
+    return env("ADZUNA_COUNTRY", "in").strip()
+
+def adzuna_api_url() -> str:
+    return env("ADZUNA_API_URL", "https://api.adzuna.com/v1/api").rstrip("/")
+
+
+def smartrecruiters_api_url() -> str:
+    return env("SMARTRECRUITERS_API_URL", "https://api.smartrecruiters.com/v1").rstrip("/")

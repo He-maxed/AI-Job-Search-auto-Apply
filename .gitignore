@@ -19,6 +19,7 @@ oauth-tokens/
 # Personal data and runtime state
 data/*.db
 data/*.db-journal
+data/boards*.json
 profile/profile.json
 resumes/generated/
 resumes/*.pdf

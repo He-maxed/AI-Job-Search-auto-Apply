@@ -14,8 +14,14 @@ Two independent provider layers, selected by configuration:
 - **Job source** — `job_agent/jobs`. Interface `JobSource` emits a normalized
   `Job` model from a `JobQuery`. Adapters live under `job_agent/jobs/sources/`.
   Current adapters: `jobgpt` (optional), `greenhouse` (public job-board API),
-  `lever` (public postings API).
-  Future: RSS, other legitimate sources.
+  `lever` (public postings API), `ashby` (public posting API), `remotive` and
+  `jobicy` (documented remote-only feeds, no key), `adzuna` (optional, free tier
+  needs an account). Future: more legitimate sources.
+- **Board discovery** — `job_agent/discovery`. Provider-agnostic layer that
+  resolves company names into *verified board candidates* against each vendor's
+  documented public API (Greenhouse/Lever/Ashby/SmartRecruiters), caches them in
+  a gitignored catalog (`data/boards.json`), and hands board-scoped `JobSource`
+  instances to the pipeline. No company list is hard-coded into the core.
 - **LLM provider** — `job_agent/llm`. Interface `LLMProvider` (`complete(...)`).
   Default `none` (deterministic-only). First-class optional local provider:
   `ollama`. OpenAI-compatible/Gemini/Anthropic can be added later behind the
@@ -40,15 +46,20 @@ copy profile\profile.example.json profile\profile.json
 1. Fill `profile/profile.json` with **facts only**. Do not invent jobs, metrics,
    skills, or dates.
 2. Configure `.env`:
-   - `JOB_SOURCE=jobgpt`, `greenhouse`, or `lever`
+   - `JOB_SOURCE=jobgpt`, `greenhouse`, `lever`, `ashby`, `remotive`, `jobicy`,
+     or `adzuna`
    - `JOBGPT_API_KEY=...` if using JobGPT (generate at
      https://6figr.com/account → MCP Integrations; never commit it)
    - `GREENHOUSE_BOARD=<board token>` to search Greenhouse's public jobs API
      (token = the slug on `boards.greenhouse.io/<token>`; e.g. `stripe`)
    - `LEVER_COMPANY=<company slug>` to search Lever's public postings API
      (slug on `jobs.lever.co/<company>`; no auth required, e.g. `lever`)
-   - `JOB_SOURCES=greenhouse,lever` (optional) to run several sources in one
-     pipeline; without it, `JOB_SOURCE` selects a single default source
+   - `ASHBY_BOARD=<board>` to search Ashby's public posting API
+     (slug on `jobs.ashbyhq.com/<board>`; no auth required)
+   - `remotive` / `jobicy` need no credential (remote-only feeds). Adzuna needs
+     `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` (free tier) and defaults to country `in`
+   - `JOB_SOURCES=greenhouse,lever,ashby` (optional) to run several sources in
+     one pipeline; without it, `JOB_SOURCE` selects a single default source
    - `LLM_PROVIDER=none` (deterministic) or `ollama` for local AI features
 3. Run:
 
@@ -56,11 +67,38 @@ copy profile\profile.example.json profile\profile.json
 python -m job_agent run
 # or select the source on the command line:
 python -m job_agent run --source greenhouse
-python -m job_agent run --source lever
+python -m job_agent run --source ashby
 # or run several sources into ONE unified pool:
-python -m job_agent run --sources greenhouse,lever
+python -m job_agent run --sources greenhouse,lever,ashby,remotive,jobicy
 python -m job_agent run --all-sources
 ```
+
+### Board discovery (many companies from a few names)
+
+`run` searches boards you configure. To discover *which* companies even have a
+public Greenhouse/Lever/Ashby/SmartRecruiters board, resolve company names
+against each vendor's documented public API:
+
+```powershell
+python -m job_agent discover --company "Acme Inc" --company "Some Corp"
+python -m job_agent discover --input companies.json    # JSON list or {"companies": [...]}
+python -m job_agent discover --list                    # show what is already verified
+```
+
+Verified candidates are stored in the gitignored catalog `data/boards.json`
+(sequential, rate-limited, capped with `--probe-limit`; a 429 throttles that
+ATS; verified boards are reused for 24h without re-probing). Then search all of
+them at once, each board isolated and its failure contained:
+
+```powershell
+python -m job_agent run --discover
+# optionally combined with one explicitly configured source:
+python -m job_agent run --discover --sources remotive,jobicy
+```
+
+Sources are used only for personal tooling. Remotive requires linking back and
+crediting it as the source whenever listings are surfaced; the feeds may lag
+live postings by about a day. Nothing scrapes, and nothing is auto-submitted.
 
 Optional LLM feature — structured job analysis via the configured provider:
 
@@ -106,11 +144,19 @@ and does not depend on OpenCode's model, config, or MCP servers.
 ## Implemented
 
 - Provider-neutral `JobSource` / normalized `Job` + `JobQuery` with registry
-- `jobgpt` adapter (optional), `greenhouse` adapter (public job-board API,
-  no auth required), and `lever` adapter (public postings API, no auth)
+- `jobgpt` adapter (optional), `greenhouse` adapter (public job-board API, no
+  auth), `lever` adapter (public postings API, no auth), `ashby` adapter
+  (public posting API, no auth, structured remote/hybrid/on-site work modes),
+  `remotive` and `jobicy` adapters (documented remote-only feeds, no key), and
+  `adzuna` adapter (optional; free tier needs `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`;
+  affiliate redirect apply URLs)
 - Multi-source aggregation: run one, several, or all registered sources into a
   single pool; a failing source is isolated and reported while the others keep
   their results
+- Board discovery (`discover`): provider-agnostic layer that resolves company
+  names into verified board candidates against each vendor's documented public
+  API, then searches all verified boards at once (`run --discover`) with
+  per-board failure isolation and 24h freshness caching
 - End-to-end discovery pipeline: profile → query → one or more sources →
   normalize → dedup by stable ID across sources (source namespace is part of
   the identity; posts are merged only on identical IDs or identical canonical
@@ -131,7 +177,8 @@ and does not depend on OpenCode's model, config, or MCP servers.
 
 ## Not built yet
 
-- Additional job source adapters (RSS, …)
+- Additional job source adapters (an RSS/other-legitimate list, Recruitee,
+  SmartRecruiters adapter for discovered boards, …)
 - Cover letters, other drafting formats, PDF/DOCX export of tailored resumes
 - Human APPROVE → submit wiring
 - Outcome analytics

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from job_agent.config import load_dotenv
 
@@ -27,6 +28,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Run every registered job source; each uses its own explicit configuration",
     )
+    run_p.add_argument(
+        "--discover",
+        action="store_true",
+        help="Search every verified board in the discovery catalog (plus any --source/--sources)",
+    )
+    run_p.add_argument(
+        "--catalog",
+        default=None,
+        help="Path to the discovery board catalog (default: data/boards.json)",
+    )
 
     analyze_p = sub.add_parser(
         "analyze",
@@ -37,6 +48,18 @@ def main(argv: list[str] | None = None) -> int:
     analyze_p.add_argument("--llm", default=None, help="LLM provider name (default: LLM_PROVIDER env, e.g. ollama)")
     analyze_p.add_argument("--max-tokens", type=int, default=1200, help="Max tokens for the model response")
     analyze_p.add_argument("--score", action="store_true", help="Also run the deterministic scorer on the enriched job")
+
+    discover_p = sub.add_parser(
+        "discover",
+        help="Resolve company names into verified board candidates against documented public APIs, and store them in the catalog.",
+    )
+    discover_p.add_argument("--catalog", default=None, help="Path to the discovery board catalog (default: data/boards.json)")
+    discover_p.add_argument("--company", action="append", default=None, help="Company name to resolve (repeatable)")
+    discover_p.add_argument("--input", default=None, help="JSON file with company names: a list or {\"companies\": [...]}")
+    discover_p.add_argument("--ats", default="greenhouse,lever,ashby,smartrecruiters", help="ATS providers to probe (comma-separated)")
+    discover_p.add_argument("--probe-limit", type=int, default=20, help="Max network probe requests this run (default: 20)")
+    discover_p.add_argument("--list", action="store_true", help="Print the current verified catalog and exit")
+    discover_p.add_argument("--fresh", action="store_true", help="Re-probe catalog entries even if verified less than 24h ago")
 
     tailor_p = sub.add_parser(
         "tailor",
@@ -63,6 +86,8 @@ def main(argv: list[str] | None = None) -> int:
         ) + (1 if args.all_sources else 0)
         if selectors > 1:
             parser.error("--source, --sources, and --all-sources are mutually exclusive")
+        if args.all_sources and args.discover:
+            parser.error("--all-sources and --discover are mutually exclusive")
         source_names = None
         if args.sources:
             source_names = [name.strip() for name in args.sources.split(",") if name.strip()]
@@ -73,7 +98,13 @@ def main(argv: list[str] | None = None) -> int:
             source_name=args.source,
             source_names=source_names,
             use_all_sources=args.all_sources,
+            discover=args.discover,
+            catalog_path=Path(args.catalog) if args.catalog else None,
         )
+    if args.command == "discover":
+        from job_agent.discovery.cli import run_discover
+
+        return run_discover(args)
     if args.command == "analyze":
         from job_agent.analysis.cli import run_analyze
 

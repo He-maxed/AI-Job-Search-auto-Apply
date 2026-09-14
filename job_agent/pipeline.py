@@ -9,6 +9,7 @@ from job_agent.aggregate import SourceReport, collect, dedupe, resolve as resolv
 from job_agent.analysis.parse import MalformedAnalysisError
 from job_agent.analysis.service import analyze_job, enrich_job_with_analysis
 from job_agent.approve import render_approval_packet
+from job_agent.discovery import load_catalog, sources_from_catalog
 from job_agent.jobs import JobSource, SourceError
 from job_agent.jobs.query import make_query
 from job_agent.llm import LLMProvider
@@ -62,6 +63,8 @@ def run(
     sources: list[JobSource] | None = None,
     source_names: list[str] | None = None,
     use_all_sources: bool = False,
+    discover: bool = False,
+    catalog_path: Path | None = None,
     profile_path: Path | None = None,
     db_path: Path | None = None,
     llm: LLMProvider | None = None,
@@ -76,7 +79,25 @@ def run(
             "(education, experience, skills, target roles). Scoring will be weak until then."
         )
 
-    if source is not None:
+    discovered: list[JobSource] = []
+    if discover:
+        catalog = load_catalog(catalog_path)
+        discovered = sources_from_catalog(catalog)
+        if not discovered:
+            print(
+                f"Discovery catalog {catalog.path} has no verified board candidates.\n"
+                "Run 'python -m job_agent discover --company \"Some Company\"' first."
+            )
+            return 2
+        print(
+            f"Discovery catalog: {len(catalog.candidates)} candidate(s); "
+            f"{len(discovered)} verified board(s) to search."
+        )
+
+    explicit = source is not None or sources is not None or source_names or use_all_sources
+    if discover and not explicit:
+        selected = discovered
+    elif source is not None:
         selected = [source]
     elif sources is not None:
         selected = sources
@@ -87,6 +108,8 @@ def run(
         except SourceError as exc:
             print(exc)
             return 2
+    if discover and explicit:
+        selected = discovered + selected
     if len(selected) == 1:
         print(f"Job source: {selected[0].key}")
     else:
