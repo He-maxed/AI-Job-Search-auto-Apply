@@ -16,6 +16,7 @@ from job_agent.llm.registry import get_llm
 from job_agent.memory import Memory
 from job_agent.profile import ensure_profile, profile_is_sparse
 from job_agent.score import format_decision, score_job
+from job_agent.workmode import EXCLUDED_MODES, PRIMARY_MODES, classify_work_mode
 
 
 def rank_rows(rows: list[tuple[dict[str, Any], dict[str, Any]]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
@@ -94,13 +95,15 @@ def run(
     memory = Memory(db_path) if db_path else Memory()
     try:
         seen = memory.known_job_ids()
-        rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        all_rows: list[tuple[dict[str, Any], dict[str, Any], str]] = []
         new_count = 0
         analyzed = 0
         analysis_failed = 0
         first_analysis_error: str | None = None
         for job in jobs:
             jd = job.to_dict()
+            work_mode = classify_work_mode(jd)
+            jd["workMode"] = work_mode
             job_id = str(jd["id"])
             if llm_on:
                 try:
@@ -118,10 +121,18 @@ def run(
             decision = score_job(jd, profile)
             memory.save_score(job_id, decision)
             decision["_new"] = is_new
-            rows.append((jd, decision))
+            all_rows.append((jd, decision, work_mode))
 
-        dup_count = len(rows) - new_count
-        rows = rank_rows(rows)
+        dup_count = len(all_rows) - new_count
+        primary = [(jd, d) for jd, d, mode in all_rows if mode in PRIMARY_MODES]
+        unknown = [(jd, d) for jd, d, mode in all_rows if mode == "unknown"]
+        on_site = [(jd, d) for jd, d, mode in all_rows if mode in EXCLUDED_MODES]
+        primary = rank_rows(primary)
+
+        mode_counts = ", ".join(
+            f"{mode}: {sum(1 for _jd, _d, m in all_rows if m == mode)}" for mode in ("remote", "hybrid", "unknown", "on_site")
+        )
+        print(f"Work mode (deterministic, pre-LLM): {mode_counts}")
         print(f"New jobs (not seen before): {new_count}   Already in storage: {dup_count}")
         if llm_on:
             line = f"LLM analysis: {analyzed} job(s) enriched, {analysis_failed} failed."
@@ -133,18 +144,29 @@ def run(
         if first_analysis_error:
             print(f"  first analysis failure: {first_analysis_error}")
         print("")
-        for _jd, decision in rows:
+        print("Primary recommendations (remote or hybrid):")
+        for _jd, decision in primary:
             marker = "NEW" if decision.pop("_new", False) else "SEEN"
             print(f"--- {marker} | ranked by fit {decision['fit_score']}/100 | priority {decision['priority']} ---")
             print(format_decision(decision))
             print("")
+        if unknown:
+            print(f"Not in primary results — work mode unknown (not stated as remote/hybrid): {len(unknown)}")
+            for jd, decision in unknown:
+                print(f"  [unknown work mode] {decision.get('title') or 'Unknown role'} | {decision.get('company') or 'Unknown company'}")
+            print("")
+        if on_site:
+            print(f"Excluded: on-site role (never recommended): {len(on_site)}")
+            for jd, decision in on_site:
+                print(f"  [on-site] {decision.get('title') or 'Unknown role'} | {decision.get('company') or 'Unknown company'}")
+            print("")
 
-        top = next((item for item in rows if item[1]["tier"] in {"A", "B"}), None)
+        top = next((item for item in primary if item[1]["tier"] in {"A", "B"}), None)
         if top:
             jd, decision = top
             print(render_approval_packet(jd, decision))
         else:
-            print("No A/B jobs this run. Nothing to prepare for approval.")
+            print("No A/B remote/hybrid jobs this run. Nothing to prepare for approval.")
     finally:
         memory.close()
     return 0

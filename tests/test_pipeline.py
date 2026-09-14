@@ -305,3 +305,81 @@ def test_malformed_source_data_graceful(profile, tmp_path, capsys):
         assert memory.known_job_ids() == set()
     finally:
         memory.close()
+
+
+def test_remote_and_hybrid_jobs_are_primary(profile, tmp_path, capsys):
+    db_path = tmp_path / "data.db"
+    src = FakeSource(
+        [
+            make_job(1),
+            make_job(2, description="Hybrid role, 3 days per week in our New York office"),
+        ]
+    )
+    assert run(source=src, profile_path=profile, db_path=db_path) == 0
+    out = capsys.readouterr().out
+    assert "Work mode (deterministic, pre-LLM): remote: 1, hybrid: 1" in out
+    assert out.count("ranked by fit") == 2
+    assert "Excluded: on-site role" not in out
+    assert "work mode unknown" not in out
+
+
+def test_on_site_job_is_excluded_and_not_recommended(profile, tmp_path, capsys):
+    db_path = tmp_path / "data.db"
+    src = FakeSource(
+        [make_job(3, location="New Delhi, India", description="On-site role in the office", remote=False)]
+    )
+    assert run(source=src, profile_path=profile, db_path=db_path) == 0
+    out = capsys.readouterr().out
+    assert "on_site: 1" in out
+    assert "Excluded: on-site role (never recommended): 1" in out
+    assert "[on-site]" in out
+    assert "ranked by fit" not in out
+    assert "No A/B remote/hybrid jobs this run" in out
+
+
+def test_unknown_work_mode_deferred_from_primary(profile, tmp_path, capsys):
+    db_path = tmp_path / "data.db"
+    src = FakeSource(
+        [make_job(4, location="New Delhi, India", description="Join our AI products team", remote=False)]
+    )
+    assert run(source=src, profile_path=profile, db_path=db_path) == 0
+    out = capsys.readouterr().out
+    assert "unknown: 1" in out
+    assert "Not in primary results — work mode unknown" in out
+    assert "[unknown work mode]" in out
+    assert "ranked by fit" not in out
+
+
+def test_llm_cannot_flip_unknown_work_mode(profile, tmp_path, capsys):
+    db_path = tmp_path / "data.db"
+    src = FakeSource(
+        [make_job(5, location="New Delhi, India", description="Join our AI products team", remote=False)]
+    )
+    assert run(source=src, profile_path=profile, db_path=db_path, llm=FakeLLM()) == 0
+    out = capsys.readouterr().out
+    assert "Not in primary results — work mode unknown" in out
+    assert "ranked by fit" not in out
+    memory = Memory(db_path)
+    try:
+        stored = json.loads(memory.conn.execute("SELECT raw_json FROM jobs WHERE id='fake:5'").fetchone()[0])
+    finally:
+        memory.close()
+    assert stored["workMode"] == "unknown"
+
+
+def test_llm_cannot_flip_on_site_work_mode(profile, tmp_path):
+    db_path = tmp_path / "data.db"
+    src = FakeSource(
+        [make_job(6, location="New Delhi, India", description="On-site role in the office", remote=False)]
+    )
+    assert run(source=src, profile_path=profile, db_path=db_path, llm=FakeLLM()) == 0
+    memory = Memory(db_path)
+    try:
+        stored = json.loads(memory.conn.execute("SELECT raw_json FROM jobs WHERE id='fake:6'").fetchone()[0])
+        explanation = json.loads(
+            memory.conn.execute("SELECT explanation_json FROM scores WHERE job_id='fake:6'").fetchone()[0]
+        )
+    finally:
+        memory.close()
+    assert stored["workMode"] == "on_site"
+    assert explanation["fit_score"] is not None
