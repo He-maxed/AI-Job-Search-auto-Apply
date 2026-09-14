@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from job_agent.memory import Memory
@@ -42,6 +44,54 @@ def test_upsert_is_idempotent_and_preserves_first_seen(db):
 def test_upsert_requires_id(db):
     with pytest.raises(ValueError):
         db.upsert_job({"title": "no id"})
+
+
+def test_upsert_preserves_stored_when_fresh_values_empty(db):
+    db.upsert_job(
+        {
+            "id": "j1",
+            "title": "Engineer",
+            "company": "Co",
+            "description": "Full posting text.",
+            "location": "Remote",
+            "skills": ["python"],
+            "salaryMin": 100000,
+            "salaryMax": 140000,
+            "remote": True,
+        }
+    )
+    db.upsert_job(
+        {
+            "id": "j1",
+            "title": "",
+            "company": "",
+            "description": "",
+            "location": "",
+            "skills": [],
+            "salaryMin": None,
+            "salaryMax": None,
+            "remote": False,
+        }
+    )
+    row = db.conn.execute(
+        "SELECT * FROM jobs WHERE id='j1'"
+    ).fetchone()
+    stored = json.loads(row["raw_json"])
+    assert row["title"] == "Engineer"
+    assert stored["description"] == "Full posting text."
+    assert stored["location"] == "Remote"
+    assert stored["skills"] == ["python"]
+    assert stored["salaryMin"] == 100000
+    assert stored["remote"] is True
+
+
+def test_upsert_fresh_values_override_stored(db):
+    db.upsert_job({"id": "j1", "title": "First", "description": "old"})
+    db.upsert_job({"id": "j1", "title": "Second", "description": "new"})
+    row = db.conn.execute("SELECT * FROM jobs WHERE id='j1'").fetchone()
+    stored = json.loads(row["raw_json"])
+    assert row["title"] == "Second"
+    assert stored["description"] == "new"
 
 
 def test_save_score_inserts_then_updates(db):

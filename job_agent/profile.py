@@ -17,10 +17,14 @@ def load_profile(path: Path | None = None) -> dict[str, Any]:
     return json.loads(target.read_text(encoding="utf-8"))
 
 
-def ensure_profile() -> dict[str, Any]:
-    if not PROFILE_PATH.exists():
-        PROFILE_PATH.write_text(PROFILE_EXAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-    return load_profile()
+def ensure_profile(path: Path | None = None) -> dict[str, Any]:
+    target = Path(path) if path else PROFILE_PATH
+    if not target.exists():
+        if path is None:
+            PROFILE_PATH.write_text(PROFILE_EXAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        else:
+            raise FileNotFoundError(f"Missing profile file: {target}")
+    return load_profile(target)
 
 
 def all_skills(profile: dict[str, Any]) -> list[str]:

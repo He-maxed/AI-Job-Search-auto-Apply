@@ -96,6 +96,42 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+MERGE_KEYS = (
+    "title",
+    "company",
+    "url",
+    "applyUrl",
+    "location",
+    "description",
+    "experienceLevel",
+    "postedAt",
+)
+LIST_KEYS = ("skills",)
+NUM_KEYS = ("salaryMin", "salaryMax")
+
+
+def merge_job_payload(stored: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
+    """Merge a fresh fetch into the stored payload without losing useful data.
+
+    Fresh non-empty values win; stored values are kept when the fresh fetch
+    provides nothing (e.g. a truncated description or a run without LLM
+    enrichment). This keeps first-seen data and prior analysis intact.
+    """
+    out = dict(fresh)
+    for key in MERGE_KEYS:
+        if not out.get(key) and stored.get(key):
+            out[key] = stored[key]
+    for key in LIST_KEYS:
+        if not out.get(key) and stored.get(key):
+            out[key] = list(stored[key])
+    for key in NUM_KEYS:
+        if out.get(key) is None and stored.get(key) is not None:
+            out[key] = stored[key]
+    if stored.get("remote") and not out.get("remote"):
+        out["remote"] = True
+    return out
+
+
 class Memory:
     def __init__(self, path: Path | None = None):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -110,20 +146,25 @@ class Memory:
         job_id = str(job.get("id") or "")
         if not job_id:
             raise ValueError("Job is missing id")
-        existing = self.conn.execute("SELECT first_seen_at FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        existing = self.conn.execute(
+            "SELECT first_seen_at, raw_json FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
         payload = json.dumps(job, ensure_ascii=False)
         if existing:
+            stored = json.loads(existing["raw_json"])
+            merged = merge_job_payload(stored, job)
+            payload = json.dumps(merged, ensure_ascii=False)
             self.conn.execute(
                 """
                 UPDATE jobs SET title=?, company=?, url=?, location=?, remote=?, raw_json=?, last_seen_at=?
                 WHERE id=?
                 """,
                 (
-                    job.get("title"),
-                    job.get("company"),
-                    job.get("url") or job.get("applyUrl"),
-                    job.get("location"),
-                    1 if job.get("remote") else 0,
+                    merged.get("title"),
+                    merged.get("company"),
+                    merged.get("url") or merged.get("applyUrl"),
+                    merged.get("location"),
+                    1 if merged.get("remote") else 0,
                     payload,
                     now,
                     job_id,

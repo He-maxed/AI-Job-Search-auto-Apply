@@ -61,10 +61,17 @@ python -m job_agent analyze --text "Backend engineer, Python and SQL, 5+ years, 
 # add --score to also run the deterministic scorer on the analysis-enriched job
 ```
 
-When `LLM_PROVIDER=ollama`, analysis runs against a local Ollama model. When no
-LLM is available the command reports **"LLM provider unavailable"** and the app
-keeps working deterministically — analysis never falls back silently to another
-provider, and the LLM may only extract facts explicitly stated in the posting.
+When `LLM_PROVIDER=ollama`, analysis runs against a local Ollama model during
+either `analyze` or `run`. When no LLM is available the app keeps working
+deterministically — analysis never falls back silently to another provider, and
+the LLM may only extract facts explicitly stated in the posting.
+
+During `run`, optional LLM analysis enriches each discovered job (skills,
+salary, location, work mode) and that enrichment feeds the deterministic
+scorer. Deterministic guardrails stay authoritative: hard blockers, salary
+constraints, excluded companies/keywords, authorization requirements, and
+skill matching are never silently overridden by LLM output. If the LLM is
+unconfigured or fails, discovery, storage, scoring, and ranking all still work.
 
 OpenCode is the development agent only. The Python app is standalone-runnable
 and does not depend on OpenCode's model, config, or MCP servers.
@@ -74,6 +81,9 @@ and does not depend on OpenCode's model, config, or MCP servers.
 - Provider-neutral `JobSource` / normalized `Job` + `JobQuery` with registry
 - `jobgpt` adapter (optional) and `greenhouse` adapter (public job-board API,
   no auth required)
+- End-to-end discovery pipeline: profile → query → source → normalize → dedup
+  by stable ID → SQLite persistence (first-seen preserved, stored data merged
+  on re-fetch) → optional LLM enrichment → deterministic scoring → fit ranking
 - Provider-neutral `LLMProvider` with `none` default and `ollama` optional
 - Structured job-description analysis (`analyze`) with a strict schema — only
   explicitly-stated facts; deterministic scoring can consume the enriched job
