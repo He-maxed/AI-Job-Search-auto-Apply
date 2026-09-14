@@ -1,7 +1,7 @@
 [project]
 name = "job-agent"
 version = "0.1.0"
-description = "Personal intelligence layer around JobGPT"
+description = "Provider-agnostic job-hunting intelligence layer"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []

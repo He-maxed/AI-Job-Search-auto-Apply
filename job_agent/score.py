@@ -110,7 +110,7 @@ def score_job(job: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     elif mine:
         skill_ratio = min(len(mentioned) / max(len(mine), 1) * 4, 1.0) if mentioned else 0.35
         strong.extend(sorted(mentioned))
-        notes.append("JobGPT did not return a skill list; overlap inferred from title/description.")
+        notes.append("The job source returned no skill list; overlap inferred from title/description.")
     else:
         skill_ratio = 0.0
         notes.append("Profile has no skills yet; skill score is 0.")
@@ -202,7 +202,7 @@ def score_job(job: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
             strong.extend(f"Project tech: {t}" for t in sorted(set(tech_hits))[:5])
         else:
             project_score = 0.45
-            notes.append("No project technology overlap found in the truncated JobGPT description.")
+            notes.append("No project technology overlap found in the (possibly truncated) job description.")
 
     # Application effort: lower is better. Truncated JD / missing URL / missing skills raise effort.
     effort = 1.0
@@ -214,7 +214,7 @@ def score_job(job: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     description = str(job.get("description") or "")
     if len(description) >= 490 or description.endswith("..."):
         effort += 0.2
-        notes.append("JobGPT truncated the description at ~500 characters; scoring is incomplete.")
+        notes.append("The job description is truncated at ~500 characters; scoring is incomplete.")
 
     fit = (
         40 * skill_ratio

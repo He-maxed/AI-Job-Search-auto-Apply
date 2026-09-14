@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jobgpt": {
+      "type": "remote",
+      "url": "https://mcp.6figr.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:JOBGPT_API_KEY}"
+      }
+    }
+  }
+}

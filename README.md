@@ -1,8 +1,32 @@
 # job_agent
 
-Personal intelligence layer around [JobGPT](https://github.com/6figr-com/jobgpt-mcp-server). JobGPT finds and (later) applies. This repo decides **whether this person should spend an application**.
+Provider-agnostic personal job-hunting intelligence layer. Job sources and AI/LLM
+providers plug in behind small interfaces; the deterministic core (scoring,
+memory, approval workflow) never requires a paid API, JobGPT, or OpenCode.
 
-Auto-apply is **disabled**. `python -m job_agent run` only searches, scores, and stores results.
+Auto-apply is **disabled**. Nothing here submits an application, spends credits,
+fabricates experience, or bypasses any security control.
+
+## Architecture
+
+Two independent provider layers, selected by configuration:
+
+- **Job source** — `job_agent/jobs`. Interface `JobSource` emits a normalized
+  `Job` model from a `JobQuery`. Adapters live under `job_agent/jobs/sources/`.
+  Current adapter: `jobgpt` (optional). Future: Greenhouse, Lever, RSS, other
+  legitimate sources.
+- **LLM provider** — `job_agent/llm`. Interface `LLMProvider` (`complete(...)`).
+  Default `none` (deterministic-only). First-class optional local provider:
+  `ollama`. OpenAI-compatible/Gemini/Anthropic can be added later behind the
+  same interface.
+
+Flow: DISCOVER → NORMALIZE → DEDUPLICATE → SCORE → RANK → APPROVAL QUEUE →
+HUMAN APPROVES → (prepare/submit where legitimate) → RECORD RESULT.
+Never auto-submit.
+
+Deterministic functionality (ingestion, normalization, dedup, scoring, SQLite,
+approval preparation) never requires an LLM. If the configured LLM is
+unavailable, AI-dependent features report **"LLM provider unavailable"**.
 
 ## Setup
 
@@ -12,44 +36,35 @@ copy .env.example .env
 copy profile\profile.example.json profile\profile.json
 ```
 
-1. Fill `profile/profile.json` with **facts only**. Do not invent jobs, metrics, skills, or dates.
-2. Create a [6figr](https://6figr.com/account) account → MCP Integrations → API key.
-3. Put the key in `.env` as `JOBGPT_API_KEY`. Never commit `.env`.
-4. Run:
+1. Fill `profile/profile.json` with **facts only**. Do not invent jobs, metrics,
+   skills, or dates.
+2. Configure `.env`:
+   - `JOB_SOURCE=jobgpt` (the only adapter shipped today)
+   - `JOBGPT_API_KEY=...` if using JobGPT (generate at
+     https://6figr.com/account → MCP Integrations; never commit it)
+   - `LLM_PROVIDER=none` (deterministic) or `ollama` for local AI features
+3. Run:
 
 ```powershell
 python -m job_agent run
 ```
 
-Optional Cursor MCP (key stays in your user config, not this repo):
+OpenCode is the development agent only. The Python app is standalone-runnable
+and does not depend on OpenCode's model, config, or MCP servers.
 
-```json
-{
-  "mcpServers": {
-    "jobgpt": {
-      "type": "http",
-      "url": "https://mcp.6figr.com/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_KEY"
-      }
-    }
-  }
-}
-```
+## Implemented
 
-JobGPT credits: new accounts get a small free auto-apply allowance. Search may work without buying credits; auto-apply and their resume AI consume credits. We will not call those until you explicitly enable apply.
-
-## What exists now
-
-- Local profile template
-- JobGPT REST client (`search_jobs`, `get_credits`, `get_job`)
-- Deterministic fit score 0–100 and tiers A/B/C/D
+- Provider-neutral `JobSource` / normalized `Job` + `JobQuery` with registry
+- `jobgpt` adapter (optional; can be removed by setting `JOB_SOURCE` elsewhere)
+- Provider-neutral `LLMProvider` with `none` default and `ollama` optional
+- Deterministic fit score 0–100 with tiers A/B/C/D
 - SQLite memory under `data/job_agent.db` (gitignored)
-- Approval packet **preview** only — no submit
+- Approval packet preview only — no submit
+- pytest suite covering scoring, memory, job-source, and LLM layers
 
 ## Not built yet
 
-- Tailored resumes
-- Human APPROVE → `apply_to_job`
+- Additional job source adapters (Greenhouse, Lever, RSS, …)
+- Tailored resumes, JD summarization, cover-letter drafting (LLM features)
+- Human APPROVE → submit wiring
 - Outcome analytics
-- Local LLM / GPU

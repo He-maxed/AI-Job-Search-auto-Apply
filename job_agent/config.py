@@ -25,9 +25,29 @@ def load_dotenv(path: Path | None = None) -> None:
         os.environ.setdefault(key, value)
 
 
+def env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default).strip()
+
+
+def job_source() -> str:
+    return env("JOB_SOURCE", "jobgpt") or "jobgpt"
+
+
+def llm_provider() -> str:
+    return env("LLM_PROVIDER", "none") or "none"
+
+
+def ollama_base_url() -> str:
+    return env("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+
+
+def ollama_model() -> str:
+    return env("OLLAMA_MODEL", "llama3.2")
+
+
 def jobgpt_api_key() -> str:
-    return os.environ.get("JOBGPT_API_KEY", "").strip()
+    return env("JOBGPT_API_KEY")
 
 
 def jobgpt_api_url() -> str:
-    return os.environ.get("JOBGPT_API_URL", "https://6figr.com").rstrip("/")
+    return env("JOBGPT_API_URL", "https://6figr.com").rstrip("/")
