@@ -49,6 +49,19 @@ copy profile\profile.example.json profile\profile.json
 python -m job_agent run
 ```
 
+Optional LLM feature — structured job analysis via the configured provider:
+
+```powershell
+python -m job_agent analyze --text "Backend engineer, Python and SQL, 5+ years, remote"
+# or:  Get-Content job.txt | python -m job_agent analyze
+# add --score to also run the deterministic scorer on the analysis-enriched job
+```
+
+When `LLM_PROVIDER=ollama`, analysis runs against a local Ollama model. When no
+LLM is available the command reports **"LLM provider unavailable"** and the app
+keeps working deterministically — analysis never falls back silently to another
+provider, and the LLM may only extract facts explicitly stated in the posting.
+
 OpenCode is the development agent only. The Python app is standalone-runnable
 and does not depend on OpenCode's model, config, or MCP servers.
 
@@ -57,14 +70,16 @@ and does not depend on OpenCode's model, config, or MCP servers.
 - Provider-neutral `JobSource` / normalized `Job` + `JobQuery` with registry
 - `jobgpt` adapter (optional; can be removed by setting `JOB_SOURCE` elsewhere)
 - Provider-neutral `LLMProvider` with `none` default and `ollama` optional
+- Structured job-description analysis (`analyze`) with a strict schema — only
+  explicitly-stated facts; deterministic scoring can consume the enriched job
 - Deterministic fit score 0–100 with tiers A/B/C/D
 - SQLite memory under `data/job_agent.db` (gitignored)
 - Approval packet preview only — no submit
-- pytest suite covering scoring, memory, job-source, and LLM layers
+- pytest suite covering scoring, memory, job-source, LLM, and analysis layers
 
 ## Not built yet
 
 - Additional job source adapters (Greenhouse, Lever, RSS, …)
-- Tailored resumes, JD summarization, cover-letter drafting (LLM features)
+- Resume tailoring, cover letters, application drafting
 - Human APPROVE → submit wiring
 - Outcome analytics

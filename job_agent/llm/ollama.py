@@ -38,8 +38,21 @@ class OllamaProvider(LLMProvider):
             method=method,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=timeout or self.timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(detail)
+                message = parsed.get("error") or detail
+            except json.JSONDecodeError:
+                message = detail or str(exc)
+            raise LLMUnavailableError(f"ollama request failed ({exc.code}): {message}") from exc
+        except urllib.error.URLError as exc:
+            raise LLMUnavailableError(f"ollama unreachable at {self.base_url}: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise LLMUnavailableError(f"ollama timed out: {exc}") from exc
 
     def available(self) -> bool:
         try:
