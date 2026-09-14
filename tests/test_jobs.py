@@ -62,6 +62,30 @@ def test_jobgpt_normalize_maps_fields():
     assert d["salaryMin"] == 100
 
 
+def test_jobgpt_normalize_coerces_nested_scalars():
+    src = JobGPTJobSource(api_key="test-key")
+    raw = {
+        "id": 42,
+        "title": "ML Engineer",
+        "company": {"name": "Data Corp"},
+        "url": {"posting": "https://x"},
+        "location": {"city": "Remote"},
+        "description": ["a", "b"],
+        "experienceLevel": "senior",
+        "postedAt": 1704150000,
+    }
+    job = src.normalize(raw)
+    assert job.external_id == "42"
+    assert job.company == "Data Corp"
+    assert job.url is None
+    assert job.location is None
+    assert job.description is None
+    assert job.experience_level == "senior"
+    assert job.posted_at == "1704150000"
+    d = job.to_dict()
+    assert all(isinstance(d[k], (str, type(None))) for k in ("title", "company", "url", "location", "description"))
+
+
 def test_jobgpt_source_registered():
     assert get_source("jobgpt").key == "jobgpt"
     assert isinstance(get_source("jobgpt"), JobGPTJobSource)

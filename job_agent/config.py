@@ -33,6 +33,16 @@ def job_source() -> str:
     return env("JOB_SOURCE", "jobgpt") or "jobgpt"
 
 
+def job_sources() -> list[str]:
+    """Configured source list. JOB_SOURCES (comma-separated) wins; otherwise the
+    single JOB_SOURCE value is used so a plain setup behaves exactly as before."""
+    raw = env("JOB_SOURCES")
+    if raw:
+        return [name.strip() for name in raw.split(",") if name.strip()]
+    single = job_source()
+    return [single] if single else []
+
+
 def llm_provider() -> str:
     return env("LLM_PROVIDER", "none") or "none"
 

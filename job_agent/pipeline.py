@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from job_agent import config
+from job_agent.aggregate import SourceReport, collect, dedupe, resolve as resolve_sources
 from job_agent.analysis.parse import MalformedAnalysisError
 from job_agent.analysis.service import analyze_job, enrich_job_with_analysis
 from job_agent.approve import render_approval_packet
-from job_agent.jobs import JobSource, SourceError, get_source
+from job_agent.jobs import JobSource, SourceError
 from job_agent.jobs.query import make_query
 from job_agent.llm import LLMProvider
 from job_agent.llm.base import LLMUnavailableError
@@ -35,11 +36,32 @@ def _resolve_llm(llm: LLMProvider | None, llm_name: str | None) -> LLMProvider |
     return get_llm(configured)
 
 
+def _print_source_reports(reports: list[SourceReport]) -> bool:
+    """Print per-source outcomes; returns True if at least one source completed."""
+    any_completed = False
+    for report in reports:
+        if report.skipped:
+            print(
+                f"\nJob source '{report.source}' needs a credential.\n"
+                f"Set the environment variable {report.hint} (see .env.example). "
+                "Never commit the value."
+            )
+        elif not report.completed:
+            print(f"Search failed via source '{report.source}': {report.error}")
+        else:
+            any_completed = True
+            print(f"Source '{report.source}' returned {report.returned} jobs.")
+    return any_completed
+
+
 def run(
     limit: int = 20,
     source_name: str | None = None,
     *,
     source: JobSource | None = None,
+    sources: list[JobSource] | None = None,
+    source_names: list[str] | None = None,
+    use_all_sources: bool = False,
     profile_path: Path | None = None,
     db_path: Path | None = None,
     llm: LLMProvider | None = None,
@@ -54,21 +76,21 @@ def run(
             "(education, experience, skills, target roles). Scoring will be weak until then."
         )
 
-    selected = source
-    if selected is None:
+    if source is not None:
+        selected = [source]
+    elif sources is not None:
+        selected = sources
+    else:
+        names = source_names or ([source_name] if source_name else None)
         try:
-            selected = get_source(source_name)
+            selected = resolve_sources(names, use_all=use_all_sources)
         except SourceError as exc:
             print(exc)
             return 2
-        if selected.credential_hint and not os.environ.get(selected.credential_hint):
-            print(
-                f"\nJob source '{selected.key}' needs a credential.\n"
-                f"Set the environment variable {selected.credential_hint} (see .env.example). "
-                "Never commit the value."
-            )
-            return 2
-    print(f"Job source: {selected.key}")
+    if len(selected) == 1:
+        print(f"Job source: {selected[0].key}")
+    else:
+        print(f"Job sources: {', '.join(s.key for s in selected)}")
 
     query = make_query(profile, limit=limit)
     if not query.roles:
@@ -83,14 +105,15 @@ def run(
     provider = _resolve_llm(llm, llm_name)
     llm_on = provider is not None and getattr(provider, "name", "") != "none"
 
-    try:
-        jobs = selected.search(query)
-    except SourceError as exc:
-        print(f"Search failed via source '{selected.key}': {exc}")
-        return 1
-
-    print(f"Source '{selected.key}' returned {len(jobs)} jobs.")
+    jobs, reports = collect(selected, query)
     print("Auto-apply is OFF. This run only discovers, scores, and records jobs.")
+    if not _print_source_reports(reports):
+        if reports and all(report.skipped for report in reports):
+            return 2
+        return 1
+    jobs, dropped = dedupe(jobs)
+    if dropped:
+        print(f"Deduplicated across sources: {dropped} duplicate(s) removed.")
 
     memory = Memory(db_path) if db_path else Memory()
     try:
@@ -100,28 +123,38 @@ def run(
         analyzed = 0
         analysis_failed = 0
         first_analysis_error: str | None = None
+        malformed = 0
         for job in jobs:
-            jd = job.to_dict()
-            work_mode = classify_work_mode(jd)
-            jd["workMode"] = work_mode
-            job_id = str(jd["id"])
-            if llm_on:
-                try:
-                    analysis = analyze_job(jd, llm=provider, max_tokens=max_tokens)
-                    jd = enrich_job_with_analysis(jd, analysis)
-                    analyzed += 1
-                except (LLMUnavailableError, MalformedAnalysisError) as exc:
-                    analysis_failed += 1
-                    if first_analysis_error is None:
-                        first_analysis_error = f"{type(exc).__name__}: {exc}"
-            is_new = job_id not in seen
-            if is_new:
-                new_count += 1
-            memory.upsert_job(jd, source=job.source)
-            decision = score_job(jd, profile)
-            memory.save_score(job_id, decision)
-            decision["_new"] = is_new
-            all_rows.append((jd, decision, work_mode))
+            try:
+                jd = job.to_dict()
+                work_mode = classify_work_mode(jd)
+                jd["workMode"] = work_mode
+                job_id = str(jd["id"])
+                if llm_on:
+                    try:
+                        analysis = analyze_job(jd, llm=provider, max_tokens=max_tokens)
+                        jd = enrich_job_with_analysis(jd, analysis)
+                        analyzed += 1
+                    except (LLMUnavailableError, MalformedAnalysisError) as exc:
+                        analysis_failed += 1
+                        if first_analysis_error is None:
+                            first_analysis_error = f"{type(exc).__name__}: {exc}"
+                is_new = job_id not in seen
+                if is_new:
+                    new_count += 1
+                memory.upsert_job(jd, source=job.source)
+                decision = score_job(jd, profile)
+                memory.save_score(job_id, decision)
+                decision["_new"] = is_new
+                all_rows.append((jd, decision, work_mode))
+            except Exception as exc:  # isolation: one malformed job must not kill the pool
+                malformed += 1
+                print(
+                    f"  skipped malformed job from '{job.source}' "
+                    f"({getattr(job, 'external_id', '?')}): {exc}"
+                )
+        if malformed:
+            print(f"Malformed jobs skipped: {malformed}. Other sources' results are kept.")
 
         dup_count = len(all_rows) - new_count
         primary = [(jd, d) for jd, d, mode in all_rows if mode in PRIMARY_MODES]

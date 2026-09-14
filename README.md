@@ -47,6 +47,8 @@ copy profile\profile.example.json profile\profile.json
      (token = the slug on `boards.greenhouse.io/<token>`; e.g. `stripe`)
    - `LEVER_COMPANY=<company slug>` to search Lever's public postings API
      (slug on `jobs.lever.co/<company>`; no auth required, e.g. `lever`)
+   - `JOB_SOURCES=greenhouse,lever` (optional) to run several sources in one
+     pipeline; without it, `JOB_SOURCE` selects a single default source
    - `LLM_PROVIDER=none` (deterministic) or `ollama` for local AI features
 3. Run:
 
@@ -55,6 +57,9 @@ python -m job_agent run
 # or select the source on the command line:
 python -m job_agent run --source greenhouse
 python -m job_agent run --source lever
+# or run several sources into ONE unified pool:
+python -m job_agent run --sources greenhouse,lever
+python -m job_agent run --all-sources
 ```
 
 Optional LLM feature — structured job analysis via the configured provider:
@@ -85,9 +90,15 @@ and does not depend on OpenCode's model, config, or MCP servers.
 - Provider-neutral `JobSource` / normalized `Job` + `JobQuery` with registry
 - `jobgpt` adapter (optional), `greenhouse` adapter (public job-board API,
   no auth required), and `lever` adapter (public postings API, no auth)
-- End-to-end discovery pipeline: profile → query → source → normalize → dedup
-  by stable ID → SQLite persistence (first-seen preserved, stored data merged
-  on re-fetch) → optional LLM enrichment → deterministic scoring → fit ranking
+- Multi-source aggregation: run one, several, or all registered sources into a
+  single pool; a failing source is isolated and reported while the others keep
+  their results
+- End-to-end discovery pipeline: profile → query → one or more sources →
+  normalize → dedup by stable ID across sources (source namespace is part of
+  the identity; posts are merged only on identical IDs or identical canonical
+  URLs) → SQLite persistence (first-seen preserved, stored data merged
+  on re-fetch) → work-mode gate → optional LLM enrichment → deterministic
+  scoring → fit ranking
 - Provider-neutral `LLMProvider` with `none` default and `ollama` optional
 - Structured job-description analysis (`analyze`) with a strict schema — only
   explicitly-stated facts; deterministic scoring can consume the enriched job

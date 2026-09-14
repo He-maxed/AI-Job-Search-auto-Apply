@@ -18,6 +18,23 @@ def _as_number(value: Any) -> float | None:
         return None
 
 
+def _text(value: Any) -> str:
+    """Coerce a scalar Job field to text without inventing data.
+
+    The Job schema stores string scalars. If the API returns a nested object
+    (e.g. company as ``{"name": ...}``), extract the ``name``; containers that
+    carry no usable name become empty. Numbers/bools are kept as-is.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        name = value.get("name")
+        return str(name) if isinstance(name, str) else ""
+    if isinstance(value, (list, tuple, set)):
+        return ""
+    return str(value)
+
+
 @register_source
 class JobGPTJobSource(JobSource):
     key = "jobgpt"
@@ -71,18 +88,18 @@ class JobGPTJobSource(JobSource):
     def normalize(self, raw: Any) -> Job:
         return Job(
             source=self.key,
-            external_id=str(raw.get("id") or ""),
-            title=raw.get("title") or "",
-            company=raw.get("company") or "",
-            url=raw.get("url"),
-            apply_url=raw.get("applyUrl"),
-            location=raw.get("location"),
+            external_id=_text(raw.get("id")),
+            title=_text(raw.get("title")),
+            company=_text(raw.get("company")),
+            url=_text(raw.get("url")) or None,
+            apply_url=_text(raw.get("applyUrl")) or None,
+            location=_text(raw.get("location")) or None,
             remote=bool(raw.get("remote")),
-            description=raw.get("description"),
+            description=_text(raw.get("description")) or None,
             salary_min=_as_number(raw.get("salaryMin")),
             salary_max=_as_number(raw.get("salaryMax")),
             skills=list(raw.get("skills") or []),
-            experience_level=raw.get("experienceLevel"),
-            posted_at=raw.get("postedAt"),
+            experience_level=_text(raw.get("experienceLevel")) or None,
+            posted_at=_text(raw.get("postedAt")) or None,
             extra=dict(raw) if isinstance(raw, dict) else {},
         )
