@@ -73,6 +73,27 @@ python -m job_agent run --sources greenhouse,lever,ashby,remotive,jobicy
 python -m job_agent run --all-sources
 ```
 
+### Job search (shortlist)
+
+The one command to actually use the product. Searches every verified board in
+the discovery catalog, fits each job against the profile with the existing
+pipeline (discover → normalize → dedupe → work mode → geography → relevance →
+optional LLM enrichment → deterministic score → rank), and prints a shortlist:
+
+```powershell
+python -m job_agent search
+python -m job_agent search --limit 10     # default is 10
+python -m job_agent search --include-foreign   # also show foreign postings (clearly labelled)
+python -m job_agent search --json         # machine-readable JSON instead of the table
+```
+
+Ordering: India-compatible remote → India-compatible hybrid → explicit global
+remote → unknown geography last. Foreign and on-site jobs are hidden by default
+(they are never presented as India-compatible); pass `--include-foreign` to see
+foreign postings with an explicit "not India-eligible" label. Work without an
+LLM; Ollama only enriches candidates in eligible regions and a failure never
+aborts the search.
+
 ### Board discovery (many companies from a few names)
 
 `run` searches boards you configure. To discover *which* companies even have a
@@ -171,6 +192,11 @@ and does not depend on OpenCode's model, config, or MCP servers.
   deterministically, versions are stored in SQLite, and drafts are only
   produced for A/B tier remote/hybrid jobs
 - Deterministic fit score 0–100 with tiers A/B/C/D
+- `search` command: one command turns the discovery catalog into a ranked,
+  human-readable shortlist (rank, title, company, location, work mode,
+  geography/eligibility, fit, tier, relevance, short why, apply URL, source);
+  foreign and on-site jobs are hidden by default, never relabelled, and a
+  missing apply URL is shown as "unavailable" instead of being invented
 - SQLite memory under `data/job_agent.db` (gitignored)
 - Approval packet preview only — no submit
 - pytest suite covering scoring, memory, job-source, LLM, and analysis layers

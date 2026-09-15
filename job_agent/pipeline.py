@@ -21,6 +21,10 @@ from job_agent.relevance import (
     CANDIDATE_CATEGORIES,
     GEO_ENRICH_CATEGORIES,
     IRRELEVANT_CATEGORY,
+    LOCATION_FOREIGN,
+    LOCATION_INDIA_COMPATIBLE,
+    LOCATION_REMOTE_GLOBAL,
+    LOCATION_UNKNOWN,
     POSSIBLE_CATEGORY,
     STRONG_CATEGORY,
     classify_location,
@@ -62,6 +66,63 @@ def _print_source_reports(reports: list[SourceReport]) -> bool:
             any_completed = True
             print(f"Source '{report.source}' returned {report.returned} jobs.")
     return any_completed
+
+
+def _process_jobs(
+    jobs: list[Any],
+    profile: dict[str, Any],
+    provider: LLMProvider | None,
+    llm_on: bool,
+    memory: Memory,
+    max_tokens: int,
+) -> tuple[list[tuple[dict[str, Any], dict[str, Any], str]], int, int, int, int, str | None]:
+    """Normalize, classify (work mode / relevance / geography), enrich and score
+    every discovered job. Shared by ``run`` and ``shortlist`` so the CLI never
+    re-implements pipeline logic."""
+    seen = memory.known_job_ids()
+    all_rows: list[tuple[dict[str, Any], dict[str, Any], str]] = []
+    new_count = 0
+    analyzed = 0
+    analysis_failed = 0
+    first_analysis_error: str | None = None
+    malformed = 0
+    for job in jobs:
+        try:
+            jd = job.to_dict()
+            work_mode = classify_work_mode(jd)
+            jd["workMode"] = work_mode
+            relevance = classify_relevance(jd, profile)
+            jd["relevance"] = relevance.category
+            jd["relevanceReason"] = relevance.reason
+            jd["locationCategory"] = classify_location(jd)
+            job_id = str(jd["id"])
+            if llm_on and relevance.category in CANDIDATE_CATEGORIES and jd.get("locationCategory") in GEO_ENRICH_CATEGORIES:
+                try:
+                    analysis = analyze_job(jd, llm=provider, max_tokens=max_tokens)
+                    jd = enrich_job_with_analysis(jd, analysis)
+                    analyzed += 1
+                except (LLMUnavailableError, MalformedAnalysisError) as exc:
+                    analysis_failed += 1
+                    if first_analysis_error is None:
+                        first_analysis_error = f"{type(exc).__name__}: {exc}"
+            is_new = job_id not in seen
+            if is_new:
+                new_count += 1
+            memory.upsert_job(jd, source=job.source)
+            decision = score_job(jd, profile)
+            decision["relevance"] = relevance.category
+            decision["locationCategory"] = jd.get("locationCategory")
+            decision["workMode"] = work_mode
+            memory.save_score(job_id, decision)
+            decision["_new"] = is_new
+            all_rows.append((jd, decision, work_mode))
+        except Exception as exc:  # isolation: one malformed job must not kill the pool
+            malformed += 1
+            print(
+                f"  skipped malformed job from '{job.source}' "
+                f"({getattr(job, 'external_id', '?')}): {exc}"
+            )
+    return all_rows, new_count, malformed, analyzed, analysis_failed, first_analysis_error
 
 
 def run(
@@ -149,49 +210,9 @@ def run(
 
     memory = Memory(db_path) if db_path else Memory()
     try:
-        seen = memory.known_job_ids()
-        all_rows: list[tuple[dict[str, Any], dict[str, Any], str]] = []
-        new_count = 0
-        analyzed = 0
-        analysis_failed = 0
-        first_analysis_error: str | None = None
-        malformed = 0
-        for job in jobs:
-            try:
-                jd = job.to_dict()
-                work_mode = classify_work_mode(jd)
-                jd["workMode"] = work_mode
-                relevance = classify_relevance(jd, profile)
-                jd["relevance"] = relevance.category
-                jd["relevanceReason"] = relevance.reason
-                jd["locationCategory"] = classify_location(jd)
-                job_id = str(jd["id"])
-                if llm_on and relevance.category in CANDIDATE_CATEGORIES and jd.get("locationCategory") in GEO_ENRICH_CATEGORIES:
-                    try:
-                        analysis = analyze_job(jd, llm=provider, max_tokens=max_tokens)
-                        jd = enrich_job_with_analysis(jd, analysis)
-                        analyzed += 1
-                    except (LLMUnavailableError, MalformedAnalysisError) as exc:
-                        analysis_failed += 1
-                        if first_analysis_error is None:
-                            first_analysis_error = f"{type(exc).__name__}: {exc}"
-                is_new = job_id not in seen
-                if is_new:
-                    new_count += 1
-                memory.upsert_job(jd, source=job.source)
-                decision = score_job(jd, profile)
-                decision["relevance"] = relevance.category
-                decision["locationCategory"] = jd.get("locationCategory")
-                decision["workMode"] = work_mode
-                memory.save_score(job_id, decision)
-                decision["_new"] = is_new
-                all_rows.append((jd, decision, work_mode))
-            except Exception as exc:  # isolation: one malformed job must not kill the pool
-                malformed += 1
-                print(
-                    f"  skipped malformed job from '{job.source}' "
-                    f"({getattr(job, 'external_id', '?')}): {exc}"
-                )
+        all_rows, new_count, malformed, analyzed, analysis_failed, first_analysis_error = _process_jobs(
+            jobs, profile, provider, llm_on, memory, max_tokens
+        )
         if malformed:
             print(f"Malformed jobs skipped: {malformed}. Other sources' results are kept.")
 
@@ -253,3 +274,181 @@ def run(
     finally:
         memory.close()
     return 0
+
+
+# Shortlist ordering from milestone 16: India-compatible first, then explicit
+# global remote, then unknown geography; foreign jobs only when the user
+# explicitly asks for them. Within a geography tier, remote sorts before hybrid
+# and unknown work modes sink to the end.
+_SHORTLIST_GEO_PRIORITY = {
+    LOCATION_INDIA_COMPATIBLE: 0,
+    LOCATION_REMOTE_GLOBAL: 1,
+    LOCATION_UNKNOWN: 2,
+    LOCATION_FOREIGN: 3,
+}
+_SHORTLIST_WORK_MODE_PRIORITY = {"remote": 0, "hybrid": 1, "unknown": 2}
+
+
+def _shortlist_entry(
+    jd: dict[str, Any], decision: dict[str, Any], work_mode: str, rank: int
+) -> dict[str, Any]:
+    """One display-ready shortlist entry (no URLs are ever fabricated)."""
+    breakdown = decision.get("fit_breakdown") or {}
+    why_parts: list[str] = []
+    if decision.get("strong_matches"):
+        why_parts.append(", ".join(str(m) for m in decision["strong_matches"][:4]))
+    matched_skills = breakdown.get("matchedSkills") or []
+    if matched_skills:
+        why_parts.append("skills: " + ", ".join(str(s) for s in matched_skills[:4]))
+    why = "; ".join(why_parts) or decision.get("reason") or "no explanation"
+    return {
+        "rank": rank,
+        "title": decision.get("title") or jd.get("title") or "Unknown role",
+        "company": decision.get("company") or jd.get("company") or "Unknown company",
+        "location": jd.get("location") or "",
+        "workMode": work_mode,
+        "geoCategory": jd.get("locationCategory") or LOCATION_UNKNOWN,
+        "geoEligible": bool(breakdown.get("geoEligible")),
+        "fitScore": decision.get("fit_score", 0) or 0,
+        "tier": decision.get("tier", "D"),
+        "verdict": decision.get("verdict") or "",
+        "relevance": jd.get("relevance") or "unknown",
+        "why": why,
+        "applyUrl": jd.get("applyUrl") or jd.get("url") or None,
+        "url": jd.get("url") or None,
+        "source": jd.get("source") or "",
+        "jobId": jd.get("id") or "",
+    }
+
+
+def shortlist(
+    limit: int = 10,
+    *,
+    sources: list[JobSource] | None = None,
+    source_name: str | None = None,
+    source_names: list[str] | None = None,
+    use_all_sources: bool = False,
+    discover: bool = True,
+    catalog_path: Path | None = None,
+    profile_path: Path | None = None,
+    db_path: Path | None = None,
+    llm: LLMProvider | None = None,
+    llm_name: str | None = None,
+    max_tokens: int = 1200,
+    include_foreign: bool = False,
+) -> dict[str, Any]:
+    """Run the existing discovery→classify→score→rank pipeline and return a
+    clean, ranked shortlist of jobs the user can realistically consider.
+
+    Consumes the exact same pipeline logic as ``run`` (single source of truth);
+    the caller only formats the returned entries. Never fabricates eligibility
+    or URLs, and works entirely without an LLM.
+    """
+    result: dict[str, Any] = {
+        "exit_code": 0,
+        "jobs": [],
+        "sources": [],
+        "messages": [],
+        "fetched": 0,
+        "enriched": 0,
+        "skipped_sources": 0,
+        "deduplicated": 0,
+        "irrelevant_excluded": 0,
+        "eligible": 0,
+    }
+    profile = ensure_profile(profile_path)
+
+    selected: list[JobSource] = []
+    if discover:
+        catalog = load_catalog(catalog_path)
+        selected = sources_from_catalog(catalog)
+        if not selected:
+            result["exit_code"] = 2
+            result["messages"].append(
+                f"Discovery catalog {catalog.path} has no verified board candidates.\n"
+                "Run 'python -m job_agent discover --company \"Some Company\"' first."
+            )
+            return result
+    if sources:
+        selected = sources + selected
+    elif source_name is not None or source_names or use_all_sources:
+        try:
+            resolved = resolve_sources(source_names or [source_name], use_all=use_all_sources)
+            selected = resolved + selected
+        except SourceError as exc:
+            result["exit_code"] = 2
+            result["messages"].append(str(exc))
+            return result
+    result["sources"] = [s.key for s in selected]
+
+    query = make_query(profile, limit=max(limit * 2, 20))
+    if not query.roles:
+        result["exit_code"] = 2
+        result["messages"].append(
+            "profile.json is missing preferences.target_roles. "
+            'Add at least one, e.g. "target_roles": ["AI Engineer"].'
+        )
+        return result
+
+    provider = _resolve_llm(llm, llm_name)
+    llm_on = provider is not None and getattr(provider, "name", "") != "none"
+
+    jobs, reports = collect(selected, query)
+    if not any(r.completed for r in reports):
+        result["messages"].append("No job source returned results.")
+        for report in reports:
+            if report.skipped:
+                result["messages"].append(f"Source '{report.source}' needs credential {report.hint}.")
+            elif report.error:
+                result["messages"].append(f"Source '{report.source}' failed: {report.error}")
+        result["exit_code"] = 1 if reports else 2
+        return result
+    result["skipped_sources"] = sum(1 for r in reports if not r.completed)
+    result["fetched"] = sum(r.returned for r in reports if r.completed)
+
+    jobs, dropped = dedupe(jobs)
+    result["deduplicated"] = dropped
+
+    memory = Memory(db_path) if db_path else Memory()
+    try:
+        all_rows, new_count, malformed, analyzed, analysis_failed, first_error = _process_jobs(
+            jobs, profile, provider, llm_on, memory, max_tokens
+        )
+    finally:
+        memory.close()
+    result["enriched"] = analyzed
+    if analysis_failed:
+        result["messages"].append(
+            f"{analysis_failed} job(s) could not be enriched; deterministic scores were still computed."
+        )
+
+    def rank_key(item: tuple[dict[str, Any], dict[str, Any], str]) -> tuple:
+        jd, decision, mode = item
+        geo = _SHORTLIST_GEO_PRIORITY.get(jd.get("locationCategory"), 2)
+        wm = _SHORTLIST_WORK_MODE_PRIORITY.get(mode, 2)
+        return (geo, wm, decision.get("tier") == "D", -decision.get("fit_score", 0), -decision.get("priority", 0))
+
+    eligible = [
+        (jd, decision, mode)
+        for jd, decision, mode in all_rows
+        if mode not in EXCLUDED_MODES
+        and jd.get("relevance") != IRRELEVANT_CATEGORY
+        and (include_foreign or jd.get("locationCategory") != LOCATION_FOREIGN)
+    ]
+    result["irrelevant_excluded"] = sum(
+        1 for jd, _d, _m in all_rows if jd.get("relevance") == IRRELEVANT_CATEGORY
+    )
+    ordered = sorted(eligible, key=rank_key)
+    result["eligible"] = len(ordered)
+    result["jobs"] = [_shortlist_entry(jd, decision, mode, i) for i, (jd, decision, mode) in enumerate(ordered[:limit], 1)]
+
+    summary = (
+        f"Fetched {result['fetched']} job(s) from {len(result['sources'])} source(s); "
+        f"{result['deduplicated']} duplicate(s) removed; "
+        f"{len(all_rows)} analyzed; "
+        f"{result['eligible']} in India/global-remote target range; "
+        f"{len(result['jobs'])} in shortlist"
+        f"{' (LLM: ' + str(result['enriched']) + ' enriched)' if llm_on else ' (no LLM; deterministic only)'}."
+    )
+    result["messages"].insert(0, summary)
+    return result

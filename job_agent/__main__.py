@@ -76,6 +76,31 @@ def main(argv: list[str] | None = None) -> int:
     tailor_p.add_argument("--db-path", default=None, help="Path to the job database")
     tailor_p.add_argument("--profile-path", default=None, help="Path to the JSON profile")
 
+    search_p = sub.add_parser(
+        "search",
+        help="Search the verified boards and print a ranked shortlist of jobs worth considering.",
+    )
+    search_p.add_argument("--limit", type=int, default=10, help="Max jobs in the shortlist (default: 10)")
+    search_p.add_argument(
+        "--catalog",
+        default=None,
+        help="Path to the discovery board catalog (default: data/boards.json)",
+    )
+    search_p.add_argument(
+        "--include-foreign",
+        action="store_true",
+        help="Also show foreign / location-restricted postings (clearly labelled)",
+    )
+    search_p.add_argument(
+        "--json",
+        action="store_true",
+        help="Print a machine-readable JSON document instead of the human table",
+    )
+    search_p.add_argument("--llm", default=None, help="LLM provider name (default: LLM_PROVIDER env, e.g. ollama)")
+    search_p.add_argument("--max-tokens", type=int, default=1200, help="Max tokens for the model response")
+    search_p.add_argument("--db-path", default=None, help="Path to the job database")
+    search_p.add_argument("--profile-path", default=None, help="Path to the JSON profile")
+
     args = parser.parse_args(argv)
     if args.command == "run":
         from job_agent.pipeline import run
@@ -113,6 +138,10 @@ def main(argv: list[str] | None = None) -> int:
         from job_agent.resume.cli import run_tailor
 
         return run_tailor(args)
+    if args.command == "search":
+        from job_agent.search import run_search
+
+        return run_search(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 
