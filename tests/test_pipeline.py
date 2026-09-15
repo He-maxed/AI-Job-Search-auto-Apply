@@ -244,6 +244,60 @@ def test_llm_malformed_output_is_graceful(profile, tmp_path):
         memory.close()
 
 
+def test_llm_skipped_for_irrelevant_jobs(profile, tmp_path, capsys):
+    class CountingLLM(FakeLLM):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.calls = 0
+
+        def complete(self, prompt, **kwargs):
+            self.calls += 1
+            return super().complete(prompt, **kwargs)
+
+    db_path = tmp_path / "data.db"
+    llm = CountingLLM()
+    jobs = [
+        make_job(11),
+        make_job(12, title="Account Executive", description="AI-powered CRM", skills=[]),
+    ]
+    assert run(source=FakeSource(jobs), profile_path=profile, db_path=db_path, llm=llm) == 0
+    out = capsys.readouterr().out
+    assert llm.calls == 1  # only the strong candidate is sent to the LLM
+    assert "Relevance (deterministic, pre-LLM): strong_candidate: 1, possible_candidate: 0, irrelevant: 1" in out
+    assert "Location (deterministic, pre-LLM): india_compatible: 0, remote_global: 2, foreign: 0, unknown: 0" in out
+    assert "LLM analysis: 1 job(s) enriched, 0 failed." in out
+    memory = Memory(db_path)
+    try:
+        stored = json.loads(memory.conn.execute("SELECT raw_json FROM jobs WHERE id='fake:12'").fetchone()[0])
+        decision = json.loads(
+            memory.conn.execute("SELECT explanation_json FROM scores WHERE job_id='fake:12'").fetchone()[0]
+        )
+    finally:
+        memory.close()
+    assert stored["relevance"] == "irrelevant"
+    assert stored["locationCategory"] == "remote_global"
+    assert decision["relevance"] == "irrelevant"
+
+
+def test_llm_enriched_job_keeps_pre_filter_metadata(profile, tmp_path):
+    db_path = tmp_path / "data.db"
+    llm = FakeLLM()
+    assert run(
+        source=FakeSource([make_job(13, title="Platform Engineer", description="", skills=[], location=None, remote=False)]),
+        profile_path=profile,
+        db_path=db_path,
+        llm=llm,
+    ) == 0
+    memory = Memory(db_path)
+    try:
+        stored = json.loads(memory.conn.execute("SELECT raw_json FROM jobs WHERE id='fake:13'").fetchone()[0])
+    finally:
+        memory.close()
+    assert stored["relevance"] == "possible_candidate"
+    assert stored["locationCategory"] == "unknown"
+    assert stored["workMode"] == "unknown"
+
+
 def test_deterministic_blocker_overrides_llm(profile, make_profile, tmp_path):
     blocked = make_profile(
         preferences={

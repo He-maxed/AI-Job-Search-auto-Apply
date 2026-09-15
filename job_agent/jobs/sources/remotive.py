@@ -110,11 +110,14 @@ class RemotiveJobSource(JobSource):
         category = raw.get("category")
         if category:
             extra["category"] = category
+        company = str(raw.get("company_name") or "")
+        if company:
+            extra["companySource"] = "posting"
         return Job(
             source=self.key,
             external_id=job_id,
             title=str(raw.get("title") or ""),
-            company=str(raw.get("company_name") or ""),
+            company=company,
             url=str(raw.get("url") or "").strip() or None,
             location=str(raw.get("candidate_required_location") or "") or None,
             remote=True,

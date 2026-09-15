@@ -118,11 +118,15 @@ class AdzunaJobSource(JobSource):
         ).lower()
         remote = bool(raw.get("is_remote")) or any(hint in breadcrumb for hint in REMOTE_HINTS)
         redirect = str(raw.get("redirect_url") or "").strip() or None
+        company = _name(raw.get("company"))
+        extra = dict(raw)
+        if company:
+            extra["companySource"] = "posting"
         return Job(
             source=self.key,
             external_id=job_id,
             title=str(raw.get("title") or ""),
-            company=_name(raw.get("company")),
+            company=company,
             url=redirect,
             apply_url=redirect,
             location=_name(raw.get("location")) or None,
@@ -131,5 +135,5 @@ class AdzunaJobSource(JobSource):
             salary_min=_as_number(raw.get("salary_min")),
             salary_max=_as_number(raw.get("salary_max")),
             posted_at=raw.get("created"),
-            extra=dict(raw),
+            extra=extra,
         )

@@ -100,6 +100,13 @@ def test_jobicy_count_caps_at_100(monkeypatch):
     assert calls == [("/remote-jobs", {"count": "100"})]
 
 
+def test_jobicy_company_source_tagged(monkeypatch):
+    source, _ = make_source(monkeypatch, {"jobs": [raw_job()]})
+    job = source.search(JobQuery())[0]
+    assert job.extra["companySource"] == "posting"
+    assert job.company == "Acme AI"
+
+
 def test_jobicy_missing_optional_fields(monkeypatch):
     minimal = {"id": 9, "title": "Solo Listing"}
     source, _ = make_source(monkeypatch, [minimal])

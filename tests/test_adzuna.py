@@ -99,6 +99,13 @@ def test_adzuna_requires_country(monkeypatch):
         source.search(JobQuery())
 
 
+def test_adzuna_company_source_tagged(monkeypatch):
+    source, _ = make_source(monkeypatch, raw_response(raw_result()))
+    job = source.search(JobQuery(roles=["Python Developer"]))[0]
+    assert job.extra["companySource"] == "posting"
+    assert job.company == "Acme Inc"
+
+
 def test_adzuna_missing_optional_fields(monkeypatch):
     minimal = {"id": 9, "title": "Solo"}
     source, _ = make_source(monkeypatch, raw_response(minimal))

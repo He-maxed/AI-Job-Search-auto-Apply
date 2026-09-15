@@ -124,6 +124,21 @@ def test_greenhouse_location_as_plain_string(monkeypatch):
     assert job.remote is False
 
 
+def test_greenhouse_company_name_from_board_config(monkeypatch):
+    source = GreenhouseJobSource(board="acme", company_name="Acme Corp")
+    monkeypatch.setattr(source, "_request_json", lambda path, params=None: make_response(raw_job()))
+    job = source.search(JobQuery())[0]
+    assert job.company == "Acme Corp"
+    assert job.extra["companySource"] == "board_config"
+
+
+def test_greenhouse_company_source_absent_without_name(monkeypatch):
+    source, _ = make_source(monkeypatch, make_response(raw_job()))
+    job = source.search(JobQuery())[0]
+    assert job.company == ""
+    assert job.extra.get("companySource") is None
+
+
 def test_greenhouse_malformed_response_not_object(monkeypatch):
     source, _ = make_source(monkeypatch, [1, 2, 3])
     with pytest.raises(SourceError, match="malformed"):

@@ -42,10 +42,12 @@ class LeverJobSource(JobSource):
         self,
         company: str | None = None,
         api_url: str | None = None,
+        company_name: str | None = None,
         timeout: float = 60.0,
     ):
         self.company = (company if company is not None else lever_company()).strip()
         self.api_url = (api_url if api_url is not None else lever_api_url()).rstrip("/")
+        self.company_name = (company_name or "").strip()
         self.timeout = timeout
 
     def _request_json(self, path: str, params: dict[str, str] | None = None) -> Any:
@@ -112,11 +114,13 @@ class LeverJobSource(JobSource):
         extra = dict(raw)
         if commitment:
             extra["employmentType"] = commitment
+        if self.company_name:
+            extra["companySource"] = "board_config"
         return Job(
             source=self.key,
             external_id=posting_id,
             title=title,
-            company="",
+            company=self.company_name,
             url=str(raw.get("hostedUrl") or ""),
             apply_url=str(raw.get("applyUrl") or "") or None,
             location=location or None,

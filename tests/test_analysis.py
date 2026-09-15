@@ -95,6 +95,28 @@ def test_parse_fenced_json():
     assert a.required_skills == ["Go"]
 
 
+def test_parse_prose_wrapped_json():
+    raw = 'Here is the result:\n{"required_skills": ["Go"]}\nHope that helps.'
+    a = parse_analysis(raw)
+    assert a.required_skills == ["Go"]
+
+
+def test_parse_single_json_object_amid_noise():
+    a = parse_analysis('Sure, {"required_skills": ["Python"], "preferred_skills": null, "work_mode": null} thanks')
+    assert a.required_skills == ["Python"]
+
+
+def test_parse_braces_inside_strings_ignored():
+    raw = 'FYI: {"required_skills": ["Go"], "note": "braces { inside } strings"} all good'
+    a = parse_analysis(raw)
+    assert a.required_skills == ["Go"]
+
+
+def test_parse_multiple_objects_rejected():
+    with pytest.raises(MalformedAnalysisError):
+        parse_analysis('{"required_skills": ["Go"]}{"required_skills": ["Rust"]}')
+
+
 @pytest.mark.parametrize(
     "output",
     [

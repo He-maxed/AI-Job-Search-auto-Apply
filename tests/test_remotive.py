@@ -102,6 +102,13 @@ def test_remotive_multiple_jobs_and_limit(monkeypatch):
     assert len(calls) == 1
 
 
+def test_remotive_company_source_tagged(monkeypatch):
+    source, _ = make_source(monkeypatch, {"jobs": [raw_job()], "job-count": 1})
+    job = source.search(JobQuery())[0]
+    assert job.extra["companySource"] == "posting"
+    assert job.company == "Acme AI"
+
+
 def test_remotive_missing_optional_fields(monkeypatch):
     minimal = {"id": 42, "url": "https://example.com/42", "title": "Minimal"}
     source, _ = make_source(monkeypatch, {"jobs": [minimal], "job-count": 1})

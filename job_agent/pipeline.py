@@ -17,6 +17,14 @@ from job_agent.llm.base import LLMUnavailableError
 from job_agent.llm.registry import get_llm
 from job_agent.memory import Memory
 from job_agent.profile import ensure_profile, profile_is_sparse
+from job_agent.relevance import (
+    CANDIDATE_CATEGORIES,
+    IRRELEVANT_CATEGORY,
+    POSSIBLE_CATEGORY,
+    STRONG_CATEGORY,
+    classify_location,
+    classify_relevance,
+)
 from job_agent.score import format_decision, score_job
 from job_agent.workmode import EXCLUDED_MODES, PRIMARY_MODES, classify_work_mode
 
@@ -152,8 +160,12 @@ def run(
                 jd = job.to_dict()
                 work_mode = classify_work_mode(jd)
                 jd["workMode"] = work_mode
+                relevance = classify_relevance(jd, profile)
+                jd["relevance"] = relevance.category
+                jd["relevanceReason"] = relevance.reason
+                jd["locationCategory"] = classify_location(jd)
                 job_id = str(jd["id"])
-                if llm_on:
+                if llm_on and relevance.category in CANDIDATE_CATEGORIES:
                     try:
                         analysis = analyze_job(jd, llm=provider, max_tokens=max_tokens)
                         jd = enrich_job_with_analysis(jd, analysis)
@@ -167,6 +179,9 @@ def run(
                     new_count += 1
                 memory.upsert_job(jd, source=job.source)
                 decision = score_job(jd, profile)
+                decision["relevance"] = relevance.category
+                decision["locationCategory"] = jd.get("locationCategory")
+                decision["workMode"] = work_mode
                 memory.save_score(job_id, decision)
                 decision["_new"] = is_new
                 all_rows.append((jd, decision, work_mode))
@@ -189,6 +204,17 @@ def run(
             f"{mode}: {sum(1 for _jd, _d, m in all_rows if m == mode)}" for mode in ("remote", "hybrid", "unknown", "on_site")
         )
         print(f"Work mode (deterministic, pre-LLM): {mode_counts}")
+        rel_counts = [STRONG_CATEGORY, POSSIBLE_CATEGORY, IRRELEVANT_CATEGORY]
+        rel_line = ", ".join(
+            f"{category}: {sum(1 for jd, _d, _m in all_rows if jd.get('relevance') == category)}"
+            for category in rel_counts
+        )
+        print(f"Relevance (deterministic, pre-LLM): {rel_line}")
+        geo_line = ", ".join(
+            f"{category}: {sum(1 for jd, _d, _m in all_rows if jd.get('locationCategory') == category)}"
+            for category in ("india_compatible", "remote_global", "foreign", "unknown")
+        )
+        print(f"Location (deterministic, pre-LLM): {geo_line}")
         print(f"New jobs (not seen before): {new_count}   Already in storage: {dup_count}")
         if llm_on:
             line = f"LLM analysis: {analyzed} job(s) enriched, {analysis_failed} failed."

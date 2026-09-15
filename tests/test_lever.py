@@ -120,6 +120,21 @@ def test_lever_employment_type_mapped(monkeypatch):
     assert job.extra["employmentType"] == "Full-time"
 
 
+def test_lever_company_name_from_board_config(monkeypatch):
+    source = LeverJobSource(company="acme", company_name="Acme Corp")
+    monkeypatch.setattr(source, "_request_json", lambda path, params=None: [raw_posting()])
+    job = source.search(JobQuery())[0]
+    assert job.company == "Acme Corp"
+    assert job.extra["companySource"] == "board_config"
+
+
+def test_lever_company_source_absent_without_name(monkeypatch):
+    source, _ = make_source(monkeypatch, [raw_posting()])
+    job = source.search(JobQuery())[0]
+    assert job.company == ""
+    assert job.extra.get("companySource") is None
+
+
 def test_lever_salary_mapping_when_explicitly_supplied(monkeypatch):
     raw = raw_posting()
     raw["salaryRange"] = {"min": 100000, "max": 150000, "currency": "EUR", "interval": "year"}

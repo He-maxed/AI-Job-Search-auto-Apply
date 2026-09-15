@@ -69,6 +69,7 @@ def run_discover(args: Any) -> int:
     for candidate in verified:
         catalog.add(candidate)
     catalog.save()
+    counts = report.counts()
     print(f"Probed {len(companies)} compan(ies) across {', '.join(atss)}:")
     for status in ("verified", "cached", "not_found", "error", "throttled", "budget"):
         if counts.get(status):

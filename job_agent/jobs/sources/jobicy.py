@@ -77,11 +77,14 @@ class JobicyJobSource(JobSource):
             value = raw.get(key)
             if value not in (None, ""):
                 extra[key] = value
+        company = str(raw.get("company") or "")
+        if company:
+            extra["companySource"] = "posting"
         return Job(
             source=self.key,
             external_id=job_id,
             title=str(raw.get("title") or ""),
-            company=str(raw.get("company") or ""),
+            company=company,
             url=str(raw.get("url") or "").strip() or None,
             location=location or None,
             remote=True,

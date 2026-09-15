@@ -289,6 +289,22 @@ def test_source_for_bakes_board_and_namespace():
     assert source_for("smartrecruiters", "stripe") is None  # adapter not built yet
 
 
+def test_source_for_bakes_company_name():
+    gh = source_for("greenhouse", "stripe", company_name="Stripe")
+    assert gh.company_name == "Stripe"
+    lever = source_for("lever", "acme", company_name="Acme Inc")
+    assert lever.company_name == "Acme Inc"
+    ashby = source_for("ashby", "posthog", company_name="PostHog")
+    assert ashby.company_name == "PostHog"
+
+
+def test_sources_from_catalog_bakes_company(tmp_path):
+    catalog = Catalog.load(tmp_path / "boards.json")
+    catalog.add(BoardCandidate(company="Acme Inc", ats="ashby", slug="a", verified_at=utcnow()))
+    sources = sources_from_catalog(catalog)
+    assert sources[0].company_name == "Acme Inc"
+
+
 def test_sources_from_catalog_only_verified_enabled(tmp_path):
     catalog = Catalog.load(tmp_path / "boards.json")
     catalog.add(BoardCandidate(company="A", ats="ashby", slug="a", verified_at=utcnow()))
@@ -451,3 +467,44 @@ def test_run_discover_in_parallel_with_aggregate_dedupe(profile, tmp_path, monke
     assert code == 0
     out = capsys.readouterr().out
     assert "Deduplicated across sources: 1 duplicate(s) removed." in out
+
+
+# --- discovery CLI ------------------------------------------------------------
+
+
+def test_run_discover_cli_counts_regression(monkeypatch, tmp_path, capsys):
+    """The discover CLI crashed on an undefined `counts` after probing; it must print status counts."""
+    from types import SimpleNamespace
+
+    import job_agent.discovery.cli as cli_mod
+    from job_agent.discovery.probe import ProbeReport, ProbeResult
+
+    report = ProbeReport(
+        results=[
+            ProbeResult(company="Acme Inc", ats="greenhouse", slug="acmeinc", status="verified", detail="HTTP 200"),
+            ProbeResult(company="Acme Inc", ats="greenhouse", slug="acme-inc", status="not_found", detail="HTTP 404 (no such board)"),
+        ]
+    )
+    candidate = BoardCandidate(company="Acme Inc", ats="greenhouse", slug="acmeinc", verified_at=utcnow())
+    monkeypatch.setattr(
+        cli_mod,
+        "probe_company_boards",
+        lambda *a, **k: ([candidate], report),
+    )
+    args = SimpleNamespace(
+        catalog=str(tmp_path / "boards.json"),
+        list=False,
+        company=["Acme Inc"],
+        input=None,
+        ats="greenhouse",
+        probe_limit=3,
+        fresh=False,
+    )
+    result = cli_mod.run_discover(args)
+    assert result == 0
+    out = capsys.readouterr().out
+    assert "verified  : 1" in out
+    assert "not_found : 1" in out
+    assert "Catalog: 1 total candidate(s)" in out
+    catalog_path = tmp_path / "boards.json"
+    assert catalog_path.exists()

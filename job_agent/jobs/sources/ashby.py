@@ -32,6 +32,23 @@ def _compensation_salary(raw: Any) -> tuple[float | None, float | None]:
     return _as_number(salary.get("min")), _as_number(salary.get("max"))
 
 
+def _location_str(value: Any) -> str:
+    """Render a location that may be a string or a dict (name/location/city...).
+
+    Ashby sometimes returns ``{"location": "Remote"}`` or ``{"city": ...}``
+    dicts; ``str(dict)`` would leak the repr into the normalized location.
+    """
+    if isinstance(value, dict):
+        name = value.get("name") or value.get("location")
+        if name:
+            return str(name).strip()
+        parts = [value.get(key) for key in ("city", "region", "country", "state")]
+        return ", ".join(str(p) for p in parts if p)
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
 @register_source
 class AshbyJobSource(JobSource):
     """Public Ashby Posting API (no auth): api.ashbyhq.com/posting-api/job-board/{board}."""
@@ -43,10 +60,12 @@ class AshbyJobSource(JobSource):
         self,
         board: str | None = None,
         api_url: str | None = None,
+        company_name: str | None = None,
         timeout: float = 60.0,
     ):
         self.board = (board if board is not None else ashby_board()).strip()
         self.api_url = (api_url if api_url is not None else ashby_api_url()).rstrip("/")
+        self.company_name = (company_name or "").strip()
         self.timeout = timeout
 
     def _request_json(self, path: str, params: dict[str, str] | None = None) -> Any:
@@ -96,10 +115,10 @@ class AshbyJobSource(JobSource):
         job_id = str(raw.get("id") or "").strip()
         if not job_id:
             raise SourceError("ashby job entry is missing 'id'")
-        location = str(raw.get("location") or "").strip()
+        location = _location_str(raw.get("location"))
         secondary = raw.get("secondaryLocations")
         if isinstance(secondary, list):
-            extras = [str(item).strip() for item in secondary if str(item).strip()]
+            extras = [_location_str(item) for item in secondary if _location_str(item)]
             if extras:
                 location = (" | ".join([location] + extras) if location else " | ".join(extras))
         workplace = str(raw.get("workplaceType") or "").strip().lower()
@@ -110,11 +129,13 @@ class AshbyJobSource(JobSource):
         extra = dict(raw)
         if employment_type:
             extra["employmentType"] = employment_type
+        if self.company_name:
+            extra["companySource"] = "board_config"
         return Job(
             source=self.key,
             external_id=job_id,
             title=str(raw.get("title") or ""),
-            company="",
+            company=self.company_name,
             url=practical_url,
             apply_url=apply_url,
             location=location or None,

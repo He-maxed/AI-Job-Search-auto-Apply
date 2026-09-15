@@ -34,10 +34,12 @@ class GreenhouseJobSource(JobSource):
         self,
         board: str | None = None,
         api_url: str | None = None,
+        company_name: str | None = None,
         timeout: float = 60.0,
     ):
         self.board = (board if board is not None else greenhouse_board()).strip()
         self.api_url = (api_url if api_url is not None else greenhouse_api_url()).rstrip("/")
+        self.company_name = (company_name or "").strip()
         self.timeout = timeout
 
     def _request_json(self, path: str, params: dict[str, str] | None = None) -> Any:
@@ -97,15 +99,18 @@ class GreenhouseJobSource(JobSource):
         if not job_id:
             raise SourceError("greenhouse job entry is missing 'id'")
         location = _location_name(raw.get("location"))
+        extra = dict(raw)
+        if self.company_name:
+            extra["companySource"] = "board_config"
         return Job(
             source=self.key,
             external_id=job_id,
             title=str(raw.get("title") or ""),
-            company="",
+            company=self.company_name,
             url=str(raw.get("absolute_url") or ""),
             location=location or None,
             remote="remote" in location.lower(),
             description=html_to_text(raw.get("content")) or None,
             posted_at=raw.get("updated_at"),
-            extra=dict(raw),
+            extra=extra,
         )

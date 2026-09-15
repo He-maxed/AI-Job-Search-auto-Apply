@@ -114,6 +114,47 @@ def test_ashby_secondary_locations_joined(monkeypatch):
     assert job.location == "Berlin, Germany | Remote | Dresden, Germany"
 
 
+def test_ashby_company_name_from_board_config(monkeypatch):
+    source = AshbyJobSource(board="acme", company_name="Acme Corp")
+    monkeypatch.setattr(source, "_request_json", lambda path, params=None: {"jobs": [raw_job()], "totalJobs": 1})
+    job = source.search(JobQuery())[0]
+    assert job.company == "Acme Corp"
+    assert job.extra["companySource"] == "board_config"
+
+
+def test_ashby_company_source_absent_without_name(monkeypatch):
+    source, _ = make_source(monkeypatch, {"jobs": [raw_job()], "totalJobs": 1})
+    job = source.search(JobQuery())[0]
+    assert job.company == ""
+    assert job.extra.get("companySource") is None
+
+
+def test_ashby_dict_location_rendered_without_repr(monkeypatch):
+    raw = raw_job()
+    raw["location"] = {"location": "Remote"}
+    source, _ = make_source(monkeypatch, {"jobs": [raw], "totalJobs": 1})
+    job = source.search(JobQuery())[0]
+    assert job.location == "Remote"
+    assert "{" not in job.location
+
+
+def test_ashby_dict_location_prefers_name_field(monkeypatch):
+    raw = raw_job()
+    raw["location"] = {"city": "Berlin", "country": "Germany"}
+    source, _ = make_source(monkeypatch, {"jobs": [raw], "totalJobs": 1})
+    job = source.search(JobQuery())[0]
+    assert job.location == "Berlin, Germany"
+
+
+def test_ashby_dict_secondary_locations_rendered(monkeypatch):
+    raw = raw_job(location="Remote")
+    raw["secondaryLocations"] = [{"location": "Dresden, Germany"}, "Lisbon, Portugal"]
+    source, _ = make_source(monkeypatch, {"jobs": [raw], "totalJobs": 1})
+    job = source.search(JobQuery())[0]
+    assert job.location == "Remote | Dresden, Germany | Lisbon, Portugal"
+    assert "{" not in job.location
+
+
 def test_ashby_hybrid_workplace_excluded(monkeypatch):
     assert PRIMARY_MODES == {"remote", "hybrid"}
     assert EXCLUDED_MODES == {"on_site"}
