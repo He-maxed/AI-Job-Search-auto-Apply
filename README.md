@@ -180,6 +180,32 @@ blank and flagged `requires_user_input`, never guessed. Exit code is 0 on a
 full packet (resume included), 1 if resume could not be produced, 2 for an
 unknown job id. Nothing is submitted — the packet is a reviewable draft.
 
+Human-in-the-loop application assistant (open → assist → review → STOP):
+
+```powershell
+python -m job_agent apply --job-id <stored-job-id>
+# optional: --out <packet-dir> --db-path path --headless
+```
+
+`apply` requires the M17 packet for the job (`apply-prep` first). It opens the
+job's apply URL in a browser (Playwright driving the installed Chrome, or a
+clean manual fallback when no browser can be started), fills ONLY fields whose
+values have provenance from the profile/packet (name, email, phone, location,
+LinkedIn, GitHub, education, known skills and employment info), selects the
+tailored resume / cover letter where the site exposes file inputs, and stops
+at a printed review screen. Everything the packet flags as needing a
+decision — work authorization, sponsorship, salary, notice period, start date,
+relocation, legal/demographic/background declarations, ambiguous experience —
+is left for manual input and listed as such. CAPTCHA / MFA / OTP / bot
+protection causes an immediate manual stop (never bypassed). Foreign, unknown
+geography or on-site jobs are warned about but not relabelled. The assistant
+has no way to click submit: no submit/confirm action exists in the browser
+surface, there is no `--auto-submit` flag or configuration, and the browser is
+left open for you to finish and submit by hand. If automation fails at any
+point, the command prints the application URL, packet location, and what could
+not be automated so you can continue manually. `pip install -e ".[assist]"`
+installs the Playwright dependency used for browser steps.
+
 OpenCode is the development agent only. The Python app is standalone-runnable
 and does not depend on OpenCode's model, config, or MCP servers.
 
@@ -217,6 +243,12 @@ and does not depend on OpenCode's model, config, or MCP servers.
   fallback, both provenance-valid and versioned in SQLite), a deterministic
   cover letter, safe answers.json (provenance + `requires_user_input` flags),
   and job.json with the scoring evidence — no auto-submission
+- `apply`: human-in-the-loop assistant that opens the application page, fills
+  only provenance-backed fields, selects the packet's resume/cover letter files
+  where the site allows, warns on foreign/unknown/on-site jobs, stops on
+  CAPTCHA/MFA/OTP without bypassing anything, and halts at a review screen —
+  the final submit is always manual, with a browser-free manual fallback on any
+  automation failure
 - Deterministic fit score 0–100 with tiers A/B/C/D
 - `search` command: one command turns the discovery catalog into a ranked,
   human-readable shortlist (rank, title, company, location, work mode,
@@ -224,13 +256,13 @@ and does not depend on OpenCode's model, config, or MCP servers.
   foreign and on-site jobs are hidden by default, never relabelled, and a
   missing apply URL is shown as "unavailable" instead of being invented
 - SQLite memory under `data/job_agent.db` (gitignored)
-- Approval packet preview only — no submit
-- pytest suite covering scoring, memory, job-source, LLM, and analysis layers
+- pytest suite covering scoring, memory, job-source, LLM, analysis, resume,
+  packet and application-assistant layers
 
 ## Not built yet
 
+- Automated submission (deliberately never planned)
 - Additional job source adapters (an RSS/other-legitimate list, Recruitee,
   SmartRecruiters adapter for discovered boards, …)
 - PDF/DOCX export of tailored resumes; richer cover-letter formats
-- Human APPROVE → submit wiring
 - Outcome analytics

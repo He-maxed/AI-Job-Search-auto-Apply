@@ -118,6 +118,19 @@ def main(argv: list[str] | None = None) -> int:
     apply_p.add_argument("--db-path", default=None, help="Path to the job database")
     apply_p.add_argument("--profile-path", default=None, help="Path to the JSON profile")
 
+    assist_p = sub.add_parser(
+        "apply",
+        help="Open the application page for one stored job, assist with safe fields from the M17 packet, and stop before submission. Never submits.",
+    )
+    assist_p.add_argument("--job-id", required=True, help="Stored job id with an application packet")
+    assist_p.add_argument("--out", default="application", help="Application packet directory (default: application/)")
+    assist_p.add_argument("--db-path", default=None, help="Path to the job database")
+    assist_p.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run the browser headless (for automated validation; the browser is closed at the end)",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "run":
         from job_agent.pipeline import run
@@ -163,6 +176,10 @@ def main(argv: list[str] | None = None) -> int:
         from job_agent.applyprep import run_apply_prep
 
         return run_apply_prep(args)
+    if args.command == "apply":
+        from job_agent.applyassist import run_apply
+
+        return run_apply(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

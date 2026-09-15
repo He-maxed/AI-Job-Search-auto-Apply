@@ -8,6 +8,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+assist = ["playwright"]
 
 [project.scripts]
 job-agent = "job_agent.__main__:main"
