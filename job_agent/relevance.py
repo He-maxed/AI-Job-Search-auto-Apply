@@ -57,6 +57,7 @@ IRRELEVANT_TITLE_PHRASES = (
     "risk",
     "sales",
     "sales engineer",
+    "solutions engineer",
     "salesforce",
     "support",
     "talent",

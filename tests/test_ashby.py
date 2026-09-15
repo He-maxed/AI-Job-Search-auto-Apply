@@ -79,6 +79,22 @@ def test_ashby_success_retrieval(monkeypatch):
     assert calls == [("/job-board/acme", {"includeCompensation": "true"})]
 
 
+def test_ashby_description_plain_populates_description(monkeypatch):
+    raw = raw_job()
+    raw["descriptionPlain"] = "Build ML models with Python and TensorFlow."
+    source, _ = make_source(monkeypatch, {"jobs": [raw], "totalJobs": 1})
+    job = source.search(JobQuery())[0]
+    assert job.description == "Build ML models with Python and TensorFlow."
+    assert job.extra["descriptionPlain"] == "Build ML models with Python and TensorFlow."
+
+
+def test_ashby_blank_description_stays_none(monkeypatch):
+    raw = raw_job()
+    raw["descriptionPlain"] = "   "
+    source, _ = make_source(monkeypatch, {"jobs": [raw], "totalJobs": 1})
+    assert source.search(JobQuery())[0].description is None
+
+
 def test_ashby_multiple_jobs_and_limit(monkeypatch):
     source, calls = make_source(
         monkeypatch,

@@ -78,6 +78,7 @@ def test_target_engineering_titles_are_candidates(title):
         "Legal Counsel",
         "Finance Manager",
         "Sales Engineer",
+        "Solutions Engineer",
         "Salesforce Developer",
         "HR Generalist",
         "Business Development Representative",

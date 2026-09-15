@@ -131,6 +131,7 @@ class AshbyJobSource(JobSource):
             extra["employmentType"] = employment_type
         if self.company_name:
             extra["companySource"] = "board_config"
+        description = str(raw.get("descriptionPlain") or "").strip() or None
         return Job(
             source=self.key,
             external_id=job_id,
@@ -140,7 +141,7 @@ class AshbyJobSource(JobSource):
             apply_url=apply_url,
             location=location or None,
             remote=workplace == "remote" or bool(raw.get("isRemote")),
-            description=None,
+            description=description,
             salary_min=salary_min,
             salary_max=salary_max,
             posted_at=raw.get("publishedAt"),
