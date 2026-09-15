@@ -11,6 +11,7 @@ from job_agent.jobs.base import JobSource, SourceError
 from job_agent.jobs.html import html_to_text
 from job_agent.jobs.model import Job, JobQuery
 from job_agent.jobs.registry import register_source
+from job_agent.jobs.selection import prioritize
 
 
 @register_source
@@ -59,6 +60,7 @@ class JobicyJobSource(JobSource):
         else:
             raise SourceError("jobicy returned a malformed response (expected a list or object with 'jobs')")
         jobs = [self.normalize(raw) for raw in raw_jobs]
+        jobs = prioritize(jobs, query)
         if query.limit and query.limit > 0:
             jobs = jobs[: query.limit]
         return jobs

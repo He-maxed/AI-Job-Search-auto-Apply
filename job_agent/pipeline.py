@@ -19,6 +19,7 @@ from job_agent.memory import Memory
 from job_agent.profile import ensure_profile, profile_is_sparse
 from job_agent.relevance import (
     CANDIDATE_CATEGORIES,
+    GEO_ENRICH_CATEGORIES,
     IRRELEVANT_CATEGORY,
     POSSIBLE_CATEGORY,
     STRONG_CATEGORY,
@@ -165,7 +166,7 @@ def run(
                 jd["relevanceReason"] = relevance.reason
                 jd["locationCategory"] = classify_location(jd)
                 job_id = str(jd["id"])
-                if llm_on and relevance.category in CANDIDATE_CATEGORIES:
+                if llm_on and relevance.category in CANDIDATE_CATEGORIES and jd.get("locationCategory") in GEO_ENRICH_CATEGORIES:
                     try:
                         analysis = analyze_job(jd, llm=provider, max_tokens=max_tokens)
                         jd = enrich_job_with_analysis(jd, analysis)

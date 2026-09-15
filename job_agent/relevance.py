@@ -17,6 +17,12 @@ LOCATION_REMOTE_GLOBAL = "remote_global"
 LOCATION_FOREIGN = "foreign"
 LOCATION_UNKNOWN = "unknown"
 
+# Geographic categories that justify an expensive LLM enrichment pass. Foreign /
+# location-restricted postings are scored deterministically but never sent to
+# the LLM first (the user cannot apply to them anyway); cost is spent on jobs
+# that are actually usable.
+GEO_ENRICH_CATEGORIES = {LOCATION_INDIA_COMPATIBLE, LOCATION_REMOTE_GLOBAL, LOCATION_UNKNOWN}
+
 # Title-family signals that are decisive negatives: even if the description is
 # peppered with AI/ML keywords, these roles are outside the target engineering
 # space. All matched word-bounded on the normalized title, so "sales" never
@@ -302,15 +308,16 @@ FOREIGN_RESTRICTION_PHRASES = (
     "latin america only",
 )
 
+# Explicit global-eligibility markers. Work-mode words like "remote", "fully
+# remote" or "distributed" say NOTHING about geography and must not imply a
+# worldwide candidate pool on their own; only wording that names a pool
+# ("anywhere", "worldwide", "global") is geographic evidence. Bare "Remote"
+# therefore classifies as unknown, never as remote_global.
 REMOTE_GLOBAL_MARKERS = (
-    "remote",
     "anywhere",
     "worldwide",
     "globally",
     "global",
-    "fully remote",
-    "100% remote",
-    "distributed",
 )
 
 
@@ -391,8 +398,9 @@ def classify_location(job: dict[str, Any]) -> str:
 
     Deterministic and LLM-free. The location string is authoritative; the
     description is only consulted for explicit geo-restriction phrases (e.g.
-    "must be based in the US only"). Bare "Remote" is treated as remote_global:
-    we never assume an India-only pool for a posting that does not say so.
+    "must be based in the US only"). Bare "Remote" carries no geography and is
+    classified unknown: we never infer an India-only OR a worldwide pool from
+    the word "remote" alone.
     """
     loc = str(job.get("location") or "").strip()
     if not loc:

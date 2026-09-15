@@ -12,6 +12,7 @@ from job_agent.jobs.base import JobSource, SourceError
 from job_agent.jobs.html import html_to_text
 from job_agent.jobs.model import Job, JobQuery
 from job_agent.jobs.registry import register_source
+from job_agent.jobs.selection import prioritize
 
 _SALARY_RE = re.compile(
     r"(?P<min>\d+(?:\.\d+)?)(?P<min_suf>k|m)?\s*(?:-|to)\s*"
@@ -95,6 +96,7 @@ class RemotiveJobSource(JobSource):
         if not isinstance(raw_jobs, list):
             raise SourceError("remotive returned a malformed response (missing 'jobs' list)")
         jobs = [self.normalize(raw) for raw in raw_jobs]
+        jobs = prioritize(jobs, query)
         if query.limit and query.limit > 0:
             jobs = jobs[: query.limit]
         return jobs

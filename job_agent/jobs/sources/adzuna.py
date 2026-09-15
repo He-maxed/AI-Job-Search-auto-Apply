@@ -86,7 +86,10 @@ class AdzunaJobSource(JobSource):
             raise SourceError("adzuna requires ADZUNA_APP_KEY")
         if not self.country:
             raise SourceError("adzuna requires a country code (ADZUNA_COUNTRY, e.g. in)")
-        what = " ".join(query.roles[:3])
+        # Adzuna is the only adapter with real keyword search: synthesize one
+        # bounded query from the expanded role vocabulary (fall back to exact
+        # target roles when no expansion is available).
+        what = " ".join((query.role_terms or query.roles)[:3])
         params = {
             "app_id": self.app_id,
             "app_key": self.app_key,

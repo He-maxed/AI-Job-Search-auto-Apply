@@ -264,7 +264,7 @@ def test_llm_skipped_for_irrelevant_jobs(profile, tmp_path, capsys):
     out = capsys.readouterr().out
     assert llm.calls == 1  # only the strong candidate is sent to the LLM
     assert "Relevance (deterministic, pre-LLM): strong_candidate: 1, possible_candidate: 0, irrelevant: 1" in out
-    assert "Location (deterministic, pre-LLM): india_compatible: 0, remote_global: 2, foreign: 0, unknown: 0" in out
+    assert "Location (deterministic, pre-LLM): india_compatible: 0, remote_global: 0, foreign: 0, unknown: 2" in out
     assert "LLM analysis: 1 job(s) enriched, 0 failed." in out
     memory = Memory(db_path)
     try:
@@ -275,7 +275,7 @@ def test_llm_skipped_for_irrelevant_jobs(profile, tmp_path, capsys):
     finally:
         memory.close()
     assert stored["relevance"] == "irrelevant"
-    assert stored["locationCategory"] == "remote_global"
+    assert stored["locationCategory"] == "unknown"
     assert decision["relevance"] == "irrelevant"
 
 

@@ -203,7 +203,7 @@ def test_skills_later_in_description_still_count(make_job, make_profile):
 def test_foreign_remote_ml_job_does_not_override_geo(make_job, make_profile):
     profile = _ai_profile(make_profile)
     kw = dict(title="Machine Learning Engineer", skills=[], description="ML models with Python and TensorFlow.")
-    global_job = score_job(make_job(**kw, location="Remote"), profile)
+    global_job = score_job(make_job(**kw, location="Remote (Anywhere)"), profile)
     us_only = score_job(make_job(**kw, location="Remote (US)"), profile)
     assert global_job["fit_breakdown"]["geoEligible"] is True
     assert us_only["fit_breakdown"]["geoEligible"] is False

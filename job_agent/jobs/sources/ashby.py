@@ -10,6 +10,7 @@ from job_agent.config import ashby_api_url, ashby_board
 from job_agent.jobs.base import JobSource, SourceError
 from job_agent.jobs.model import Job, JobQuery
 from job_agent.jobs.registry import register_source
+from job_agent.jobs.selection import prioritize
 
 
 def _as_number(value: Any) -> float | None:
@@ -105,6 +106,7 @@ class AshbyJobSource(JobSource):
         if not isinstance(raw_jobs, list):
             raise SourceError("ashby returned a malformed response (missing 'jobs' list)")
         jobs = [self.normalize(raw) for raw in raw_jobs]
+        jobs = prioritize(jobs, query)
         if query.limit and query.limit > 0:
             jobs = jobs[: query.limit]
         return jobs

@@ -125,7 +125,7 @@ def test_missing_title_is_irrelevant():
 @pytest.mark.parametrize(
     "location,description,expected",
     [
-        ("Remote", None, "remote_global"),
+        ("Remote", None, "unknown"),
         ("Remote (Anywhere)", None, "remote_global"),
         ("Remote", "Work from anywhere in the world.", "remote_global"),
         (None, "Remote-friendly role.", "unknown"),
@@ -139,6 +139,16 @@ def test_missing_title_is_irrelevant():
         ("Hyderabad, India", "Hybrid, 2 days per week.", "india_compatible"),
         ("Remote | Bengaluru, India | Dresden, Germany", None, "india_compatible"),
         ("Bengaluru, India", None, "india_compatible"),
+        ("Remote — India", None, "india_compatible"),
+        ("Remote — Anywhere in India", None, "india_compatible"),
+        ("Hybrid — Bengaluru", None, "india_compatible"),
+        ("Remote — India / UK", None, "india_compatible"),
+        ("Remote — Worldwide", None, "remote_global"),
+        ("Remote — Global", None, "remote_global"),
+        ("Remote — US only", None, "foreign"),
+        ("Remote — United States", None, "foreign"),
+        ("Remote — UK / EU", None, "foreign"),
+        ("Remote — Europe", None, "foreign"),
     ],
 )
 def test_location_categories(location, description, expected):

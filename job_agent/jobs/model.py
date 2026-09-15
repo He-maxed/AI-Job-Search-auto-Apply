@@ -50,6 +50,7 @@ class Job:
 @dataclass(frozen=True)
 class JobQuery:
     roles: list[str] = field(default_factory=list)
+    role_terms: list[str] = field(default_factory=list)
     locations: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)
     salary_min: float | None = None
