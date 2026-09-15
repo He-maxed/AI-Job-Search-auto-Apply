@@ -101,6 +101,23 @@ def main(argv: list[str] | None = None) -> int:
     search_p.add_argument("--db-path", default=None, help="Path to the job database")
     search_p.add_argument("--profile-path", default=None, help="Path to the JSON profile")
 
+    apply_p = sub.add_parser(
+        "apply-prep",
+        help="Build a job-specific application packet (resume, cover letter, answers, job info) for one selected job. Submits nothing.",
+    )
+    apply_p.add_argument("--job-id", required=True, help="Stored job id to prepare a packet for")
+    apply_p.add_argument("--out", default="application", help="Output directory for the packet (default: application/)")
+    apply_p.add_argument(
+        "--resume-format",
+        choices=["txt", "md"],
+        default="txt",
+        help="Resume rendering format (default: txt)",
+    )
+    apply_p.add_argument("--llm", default=None, help="LLM provider name (default: LLM_PROVIDER env, e.g. ollama)")
+    apply_p.add_argument("--max-tokens", type=int, default=1600, help="Max tokens for the model response")
+    apply_p.add_argument("--db-path", default=None, help="Path to the job database")
+    apply_p.add_argument("--profile-path", default=None, help="Path to the JSON profile")
+
     args = parser.parse_args(argv)
     if args.command == "run":
         from job_agent.pipeline import run
@@ -142,6 +159,10 @@ def main(argv: list[str] | None = None) -> int:
         from job_agent.search import run_search
 
         return run_search(args)
+    if args.command == "apply-prep":
+        from job_agent.applyprep import run_apply_prep
+
+        return run_apply_prep(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

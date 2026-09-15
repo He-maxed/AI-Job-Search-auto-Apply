@@ -11,6 +11,7 @@ from job_agent.resume.service import (
     ResumeUnavailableError,
     can_tailor,
     compute_gaps,
+    deterministic_resume_draft,
     permissible_skills,
     tailor_resume,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "ResumeUnavailableError",
     "can_tailor",
     "compute_gaps",
+    "deterministic_resume_draft",
     "permissible_skills",
     "tailor_resume",
 ]

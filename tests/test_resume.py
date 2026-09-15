@@ -13,6 +13,7 @@ from job_agent.resume import (
     ResumeUnavailableError,
     can_tailor,
     compute_gaps,
+    deterministic_resume_draft,
     parse_resume_draft,
     permissible_skills,
     tailor_resume,
@@ -470,3 +471,51 @@ def test_cli_tailor_missing_args_exit_2(capsys):
     code = main(["tailor", "--db-path", "x.db", "--profile-path", "y.json"])
     assert code == 2
     assert "Provide --job-id or --best" in capsys.readouterr().out
+
+
+def test_deterministic_draft_round_trips_through_parser():
+    draft = deterministic_resume_draft(RESUME_PROFILE, REMOTE_JOB)
+    assert isinstance(draft.target_company, str) and draft.target_company == "Acme AI"
+    assert draft.target_job_title == "NLP Engineer"
+    assert draft.skills and "python" in [s.lower() for s in draft.skills]
+    assert "pytorch" in [s.lower() for s in draft.skills]
+    assert draft.summary is not None and draft.summary.startswith("M.Tech")
+    assert draft.gaps == compute_gaps(REMOTE_JOB, None, RESUME_PROFILE)
+    parsed = parse_resume_draft(
+        json.dumps(
+            {
+                **draft.to_dict(),
+                "summary": {"text": draft.summary, "sources": ["education[0].degree", "experience[0].role"]},
+            }
+        ),
+        RESUME_PROFILE,
+        gaps=draft.gaps,
+    )
+    assert [s.lower() for s in parsed.skills] == [s.lower() for s in draft.skills]
+
+
+def test_deterministic_draft_only_contains_profile_facts():
+    draft = deterministic_resume_draft(RESUME_PROFILE, REMOTE_JOB)
+    allowed_skills = {s.lower() for s in permissible_skills(RESUME_PROFILE)}
+    for skill in draft.skills:
+        assert skill.lower() in allowed_skills
+    invented = {"kubernetes", "aws-sagemaker", "kafka", "llama"}
+    assert not (set(s.lower() for s in draft.skills) & invented)
+    assert not any("kubernetes" in h.text.lower() for h in draft.experience[0].highlights)
+    for claim in draft.experience[0].highlights:
+        assert claim.text == "Built and fine-tuned NLP model pipelines for the team."
+        assert claim.source == "experience[0].summary"
+
+
+def test_deterministic_draft_prefers_matching_entries_first():
+    draft = deterministic_resume_draft(RESUME_PROFILE, REMOTE_JOB)
+    assert draft.experience[0].role == "Research and Development Intern"
+    assert draft.projects[0].name == "OCR for Indic scripts"
+    assert draft.education[0].degree == "M.Tech (AI & DS)"
+    assert draft.education[0].institution == "C-DAC"
+
+
+def test_deterministic_draft_does_not_mutate_profile():
+    before = copy.deepcopy(RESUME_PROFILE)
+    deterministic_resume_draft(RESUME_PROFILE, REMOTE_JOB)
+    assert RESUME_PROFILE == before

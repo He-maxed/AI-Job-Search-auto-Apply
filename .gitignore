@@ -21,6 +21,7 @@ data/*.db
 data/*.db-journal
 data/boards*.json
 profile/profile.json
+application/
 resumes/generated/
 resumes/*.pdf
 resumes/*.doc

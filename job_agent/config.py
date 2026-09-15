@@ -56,6 +56,13 @@ def ollama_model() -> str:
     return env("OLLAMA_MODEL", "llama3.2")
 
 
+def ollama_timeout() -> float:
+    try:
+        return float(env("OLLAMA_TIMEOUT", "180"))
+    except ValueError:
+        return 180.0
+
+
 def jobgpt_api_key() -> str:
     return env("JOBGPT_API_KEY")
 

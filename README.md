@@ -159,6 +159,27 @@ constraints, excluded companies/keywords, authorization requirements, and
 skill matching are never silently overridden by LLM output. If the LLM is
 unconfigured or fails, discovery, storage, scoring, and ranking all still work.
 
+Application packet for one stored job (job → tailored application packet):
+
+```powershell
+python -m job_agent apply-prep --job-id <stored-job-id>
+# optional: --out <dir> --resume-format {txt|md} --llm provider --max-tokens N
+#           --db-path path --profile-path path
+```
+
+`apply-prep` writes a job-specific packet under `application/<job-id>/`:
+`resume.<fmt>`, `cover_letter.txt`, `answers.json`, and `job.json`. The resume
+is drafted per job: the LLM is tried first, and if no safe, provenance-valid
+draft comes back (missing/unavailable provider, malformed JSON, or an invented
+claim), a deterministic fallback draft assembled strictly from profile facts is
+used instead — never invented content. Cover letter and application answers are
+generated deterministically (no LLM required) from profile + job + scoring
+evidence; uncertain fields (salary expectations, notice period, work
+authorization, expected start date, legal/demographic declarations) are left
+blank and flagged `requires_user_input`, never guessed. Exit code is 0 on a
+full packet (resume included), 1 if resume could not be produced, 2 for an
+unknown job id. Nothing is submitted — the packet is a reviewable draft.
+
 OpenCode is the development agent only. The Python app is standalone-runnable
 and does not depend on OpenCode's model, config, or MCP servers.
 
@@ -191,6 +212,11 @@ and does not depend on OpenCode's model, config, or MCP servers.
   draft schema — only profile facts may enter a draft, gaps are computed
   deterministically, versions are stored in SQLite, and drafts are only
   produced for A/B tier remote/hybrid jobs
+- `apply-prep`: one command turns a stored job into a reviewable application
+  packet — job-specific resume (LLM draft or deterministic profile-facts
+  fallback, both provenance-valid and versioned in SQLite), a deterministic
+  cover letter, safe answers.json (provenance + `requires_user_input` flags),
+  and job.json with the scoring evidence — no auto-submission
 - Deterministic fit score 0–100 with tiers A/B/C/D
 - `search` command: one command turns the discovery catalog into a ranked,
   human-readable shortlist (rank, title, company, location, work mode,
@@ -205,6 +231,6 @@ and does not depend on OpenCode's model, config, or MCP servers.
 
 - Additional job source adapters (an RSS/other-legitimate list, Recruitee,
   SmartRecruiters adapter for discovered boards, …)
-- Cover letters, other drafting formats, PDF/DOCX export of tailored resumes
+- PDF/DOCX export of tailored resumes; richer cover-letter formats
 - Human APPROVE → submit wiring
 - Outcome analytics

@@ -47,6 +47,9 @@ SYSTEM_PROMPT = (
     "experience that is not in the profile.\n"
     "- Structural identity fields (role, company, degree, institution, project name) MUST be "
     "copied EXACTLY from the profile entry identified by profile_index. Do not paraphrase them.\n"
+    "- In each experience[i].highlights bullet, the \"source\" must start with the SAME index i "
+    "as that entry's profile_index (e.g. an entry with profile_index 0 may only use "
+    "experience[0].... sources).\n"
     "- Skill names, technologies, and certifications MUST be copied EXACTLY from the profile facts.\n"
     "- Publications may ONLY be drawn from profile achievements explicitly labeled as a publication.\n"
     "- If the job asks for something absent from the profile, do NOT fabricate it; simply omit it.\n"
@@ -138,12 +141,41 @@ def build_tailor_prompt(profile: dict[str, Any], job: dict[str, Any], analysis: 
             lines.append(f"Qualifications (from analysis): {analysis.qualifications}")
     lines.append("")
     lines.append("Job description:")
-    lines.append(str(job.get("description") or "(empty)"))
+    description = str(job.get("description") or "(empty)")
+    if len(description) > 4000:
+        description = description[:4000] + "\n...[job description truncated for drafting; rely only on the facts above]"
+    lines.append(description)
     lines.append("")
     lines.append(_profile_facts(profile))
+    lines.append("")
+    experience = profile.get("experience") or []
+    if experience:
+        mapping = "; ".join(
+            f"experience[{i}]={e.get('role')} at {e.get('company')}" for i, e in enumerate(experience)
+        )
+        lines.append(
+            "Profile experience indices (use these EXACTLY as profile_index and as source prefixes): "
+            + mapping
+        )
     lines.append("")
     lines.append(
         "Select and rewrite relevant profile facts for THIS job. If the job asks for something "
         "absent from the profile, omit it - never invent it. Respond with only the JSON object."
+    )
+    lines.append("")
+    lines.append(
+        "Output format example (REPLACE the values, keep exactly this structure and key names):\n"
+        + '{"target_job_id":"<exact job id given above>","target_job_title":"<exact job title>",'
+        + '"target_company":"<exact company>","summary":{"text":"2-3 sentence summary from profile facts",'
+        + '"sources":["experience[0].summary"]},"skills":["python"],"experience":[{"profile_index":0,'
+        + '"role":"<EXACT role from profile>","company":"<EXACT company from profile>",'
+        + '"highlights":[{"text":"rewritten bullet","source":"experience[0].summary"}]}],'
+        + '"projects":[{"profile_index":0,"name":"<EXACT project name>",'
+        + '"summary":{"text":"rewritten summary","source":"projects[0].summary"},'
+        + '"technologies":["<subset of the project technologies from the profile>"]}],'
+        + '"education":[{"profile_index":0,"degree":"<EXACT degree>","institution":"<EXACT institution>"}],'
+        + '"certifications":["<EXACT strings from profile>"],'
+        + '"achievements":[{"text":"rewritten achievement","source":"achievements[0]"}],'
+        + '"publications":[]}'
     )
     return "\n".join(lines)

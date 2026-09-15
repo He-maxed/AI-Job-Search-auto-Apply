@@ -17,11 +17,11 @@ class OllamaProvider(LLMProvider):
         self,
         base_url: str | None = None,
         model: str | None = None,
-        timeout: float = 120.0,
+        timeout: float | None = None,
     ):
         self.base_url = (base_url or config.ollama_base_url()).rstrip("/")
         self.model = model or config.ollama_model()
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else config.ollama_timeout()
 
     def _request(
         self,
