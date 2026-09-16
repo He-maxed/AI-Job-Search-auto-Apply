@@ -79,7 +79,11 @@ class OllamaProvider(LLMProvider):
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+                "num_gpu": config.ollama_num_gpu(),
+            },
         }
         data = self._request("POST", "/api/chat", body)
         try:

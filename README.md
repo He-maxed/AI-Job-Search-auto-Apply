@@ -134,6 +134,16 @@ either `analyze` or `run`. When no LLM is available the app keeps working
 deterministically — analysis never falls back silently to another provider, and
 the LLM may only extract facts explicitly stated in the posting.
 
+Ollama GPU priority: the app always sends `num_gpu` (default `-1`, all layers)
+on every request, so a GPU-backed Ollama server is used whenever available
+(NVIDIA CUDA or Intel Vulkan/oneAPI). To make the *server* itself prefer the
+GPU regardless of caller, set `OLLAMA_NUM_GPU=-1` (and `OLLAMA_INTEL_GPU=1` for
+an Intel XPU) in your user/system environment **before** starting `ollama
+serve`, then verify with `ollama ps` that the model shows a GPU processor
+instead of `100% CPU`. Ollama's official Windows installer includes the CUDA
+and Vulkan compute backends; a `0%` GPU usage usually means a CPU-only build or
+a broken install and is fixed by reinstalling the current official Ollama.
+
 Job-specific resume tailoring (draft only, no files, no auto-submit):
 
 ```powershell

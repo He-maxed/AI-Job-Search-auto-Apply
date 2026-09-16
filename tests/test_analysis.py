@@ -290,3 +290,66 @@ def test_ollama_unreachable_maps_to_unavailable(monkeypatch):
     assert p.available() is False
     with pytest.raises(LLMUnavailableError, match="LLM provider unavailable"):
         p.complete("hello")
+
+
+def test_ollama_requests_gpu_priority_by_default(monkeypatch):
+    import job_agent.llm.ollama as ollama_module
+    from job_agent.llm.ollama import OllamaProvider
+
+    captured: dict = {}
+
+    class FakeResp:
+        def __init__(self, data: bytes):
+            self._data = data
+
+        def read(self) -> bytes:
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        if req.full_url.endswith("/api/tags"):
+            return FakeResp(b'{"models": []}')
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        return FakeResp(b'{"message": {"content": "ok"}}')
+
+    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", fake_urlopen)
+    p = OllamaProvider(base_url="http://127.0.0.1:11434")
+    assert p.complete("hello") == "ok"
+    assert captured["body"]["options"]["num_gpu"] == -1
+
+
+def test_ollama_num_gpu_respects_env(monkeypatch):
+    import job_agent.llm.ollama as ollama_module
+    from job_agent.llm.ollama import OllamaProvider
+
+    captured: dict = {}
+
+    class FakeResp:
+        def __init__(self, data: bytes):
+            self._data = data
+
+        def read(self) -> bytes:
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        if req.full_url.endswith("/api/tags"):
+            return FakeResp(b'{"models": []}')
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        return FakeResp(b'{"message": {"content": "ok"}}')
+
+    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("OLLAMA_NUM_GPU", "24")
+    p = OllamaProvider(base_url="http://127.0.0.1:11434")
+    assert p.complete("hello") == "ok"
+    assert captured["body"]["options"]["num_gpu"] == 24

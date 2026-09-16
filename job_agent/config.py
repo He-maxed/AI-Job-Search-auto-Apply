@@ -63,6 +63,14 @@ def ollama_timeout() -> float:
         return 180.0
 
 
+def ollama_num_gpu() -> int:
+    """Layers to offload to the GPU. -1 means all layers (GPU priority always)."""
+    try:
+        return int(env("OLLAMA_NUM_GPU", "-1"))
+    except ValueError:
+        return -1
+
+
 def jobgpt_api_key() -> str:
     return env("JOBGPT_API_KEY")
 
