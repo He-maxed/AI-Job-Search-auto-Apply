@@ -9,7 +9,7 @@ from job_agent.llm.registry import get_llm
 from job_agent.profile import all_skills
 from job_agent.resume.model import ResumeDraft
 from job_agent.resume.parse import MalformedResumeError, parse_resume_draft
-from job_agent.resume.prompt import SYSTEM_PROMPT, build_tailor_prompt
+from job_agent.resume.prompt import SYSTEM_PROMPT, build_repair_prompt, build_tailor_prompt
 from job_agent.workmode import PRIMARY_MODES
 
 
@@ -77,11 +77,18 @@ def tailor_resume(
     work_mode = job.get("workMode") or job.get("work_mode")
     gaps = compute_gaps(job, analysis, profile)
     prompt = build_tailor_prompt(profile, job, analysis)
-    try:
-        raw = provider.complete(prompt, system=SYSTEM_PROMPT, max_tokens=max_tokens, temperature=0.2)
-    except LLMUnavailableError as exc:
-        raise ResumeUnavailableError(str(exc)) from exc
-    return parse_resume_draft(raw, profile, gaps=gaps)
+    for attempt in range(2):
+        try:
+            raw = provider.complete(prompt, system=SYSTEM_PROMPT, max_tokens=max_tokens, temperature=0.2)
+        except LLMUnavailableError as exc:
+            raise ResumeUnavailableError(str(exc)) from exc
+        try:
+            return parse_resume_draft(raw, profile, gaps=gaps)
+        except MalformedResumeError as exc:
+            if attempt == 0:
+                prompt = build_repair_prompt(raw, str(exc))
+                continue
+            raise
 
 
 def _job_text(job: dict[str, Any], analysis: JobAnalysis | None) -> str:

@@ -112,6 +112,20 @@ def _profile_facts(profile: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def build_repair_prompt(previous_raw: str, error: str) -> str:
+    return (
+        "The resume draft you produced was rejected by strict validation.\n"
+        f"Validation error: {error}\n\n"
+        "Your rejected draft was:\n"
+        f"{previous_raw}\n\n"
+        "Return ONLY the corrected single JSON object matching the same schema, with all "
+        "facts, structure, and wording kept identical except for fixing exactly what the "
+        "validation error reports. Especially ensure every claim \"source\" prefix (e.g. "
+        "experience[PROFILE_INDEX]....) matches its entry's profile_index. Do not add prose "
+        "or code fences."
+    )
+
+
 def build_tailor_prompt(profile: dict[str, Any], job: dict[str, Any], analysis: JobAnalysis | None) -> str:
     lines = [
         "You are tailoring a resume DRAFT for one specific job.",
