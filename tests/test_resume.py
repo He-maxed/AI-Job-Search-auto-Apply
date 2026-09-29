@@ -106,6 +106,22 @@ class FakeLLM(LLMProvider):
         return self._respond
 
 
+class SequenceLLM(LLMProvider):
+    name = "seq"
+    model = "test-model"
+
+    def __init__(self, responses: list[str]):
+        self._responses = list(responses)
+        self.calls = 0
+
+    def available(self) -> bool:
+        return True
+
+    def complete(self, prompt, *, system=None, max_tokens=1024, temperature=0.2):
+        self.calls += 1
+        return self._responses.pop(0)
+
+
 def make_valid_draft(**overrides) -> dict:
     draft = {
         "target_job_id": "resume-job-1",
@@ -153,6 +169,37 @@ def parse_ok(draft: dict, profile: dict = RESUME_PROFILE, gaps: list[str] | None
     return parse_resume_draft(json.dumps(draft), profile, gaps=gaps)
 
 
+def test_parse_prose_wrapped_json():
+    draft = make_valid_draft()
+    raw = "Here is the JSON object for the resume draft:\n\n" + json.dumps(draft) + "\nHope this helps."
+    result = parse_resume_draft(raw, RESUME_PROFILE)
+    assert result.target_job_id == "resume-job-1"
+    assert result.skills == ["python", "pytorch", "transformers"]
+
+
+def test_parse_braces_inside_strings_ignored():
+    draft = make_valid_draft()
+    draft["summary"] = {
+        "text": "Worked on {open-source} and {internal} systems, a note about braces.",
+        "sources": ["experience[0].summary"],
+    }
+    raw = 'FYI: ' + json.dumps(draft) + ' all good'
+    result = parse_resume_draft(raw, RESUME_PROFILE)
+    assert result.target_job_id == "resume-job-1"
+
+
+def test_parse_multiple_objects_rejected():
+    draft = make_valid_draft()
+    raw = json.dumps(draft) + json.dumps(make_valid_draft(target_job_id="resume-job-2"))
+    with pytest.raises(MalformedResumeError, match="JSON"):
+        parse_resume_draft(raw, RESUME_PROFILE)
+
+
+def test_parse_no_json_object_rejected():
+    with pytest.raises(MalformedResumeError, match="JSON"):
+        parse_resume_draft("sorry, no structured draft here", RESUME_PROFILE)
+
+
 def test_tailor_success_and_provenance():
     llm = FakeLLM(json.dumps(make_valid_draft()))
     result = tailor_resume(profile=copy.deepcopy(RESUME_PROFILE), job=copy.deepcopy(REMOTE_JOB), llm=llm)
@@ -166,6 +213,26 @@ def test_tailor_success_and_provenance():
     assert "projects[0].summary" in sources
     assert "achievements[1]" in sources
     assert result.publications[0].text == "Co-authored an IEEE research publication."
+
+
+def test_tailor_repairs_provenance_error_once():
+    bad = make_valid_draft()
+    bad["experience"][0]["highlights"][0]["source"] = "experience[1].summary"
+    good = make_valid_draft()
+    llm = SequenceLLM([json.dumps(bad), json.dumps(good)])
+    result = tailor_resume(profile=copy.deepcopy(RESUME_PROFILE), job=copy.deepcopy(REMOTE_JOB), llm=llm)
+    assert llm.calls == 2
+    assert result.target_job_id == "resume-job-1"
+    assert result.experience[0].highlights[0].source.startswith("experience[0].")
+
+
+def test_tailor_propagates_error_after_repair_attempt():
+    bad = make_valid_draft()
+    bad["experience"][0]["highlights"][0]["source"] = "experience[1].summary"
+    llm = SequenceLLM([json.dumps(bad), json.dumps(bad)])
+    with pytest.raises(MalformedResumeError):
+        tailor_resume(profile=copy.deepcopy(RESUME_PROFILE), job=copy.deepcopy(REMOTE_JOB), llm=llm)
+    assert llm.calls == 2
 
 
 def test_tailor_accepts_code_fenced_json():

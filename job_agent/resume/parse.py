@@ -52,6 +52,52 @@ def _without_code_fence(raw: str) -> str:
     return match.group(1).strip() if match else stripped
 
 
+def _extract_single_json_object(text: str) -> dict[str, Any] | None:
+    """Pull the ONE balanced JSON object out of prose-wrapped model output.
+
+    Quote-aware brace scanning keeps ``{`` inside strings from confusing the
+    depth counter. Only a single unambiguous JSON object is accepted: extra
+    balanced regions (e.g. two dicts side by side) return None. We never repair
+    content, only strip wrapper prose.
+    """
+    regions: list[str] = []
+    started: int | None = None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                started = index
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0 and started is not None:
+                regions.append(text[started : index + 1])
+                started = None
+    valid: list[dict[str, Any]] = []
+    for region in regions:
+        try:
+            data = json.loads(region)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            valid.append(data)
+    if len(valid) == 1:
+        return valid[0]
+    return None
+
+
 def _require_mapping(data: Any, field: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise MalformedResumeError(f"field '{field}' must be an object")
@@ -124,7 +170,9 @@ def parse_resume_draft(raw: str, profile: dict[str, Any], gaps: list[str] | None
     try:
         data = json.loads(clean)
     except json.JSONDecodeError as exc:
-        raise MalformedResumeError(f"model output is not valid JSON: {exc}") from exc
+        data = _extract_single_json_object(clean)
+        if data is None:
+            raise MalformedResumeError(f"model output is not valid JSON: {exc}") from exc
     data = _require_mapping(data, "draft")
 
     collector = _Collector()
