@@ -7,6 +7,26 @@ memory, approval workflow) never requires a paid API, JobGPT, or OpenCode.
 Auto-apply is **disabled**. Nothing here submits an application, spends credits,
 fabricates experience, or bypasses any security control.
 
+> **Documentation:** full tutorial — setup, every command, configuration, scoring,
+> workflows, GPU setup, and troubleshooting — is in [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md).
+
+**Features at a glance**
+
+- 7 job-source adapters (greenhouse, lever, ashby, remotive, jobicy, adzuna,
+  jobgpt) + board discovery (`discover`) with a verified-board catalog
+- End-to-end pipeline: discover → normalize → dedupe → work-mode gate → optional
+  LLM enrichment → deterministic score (0–100, tiers A/B/C/D) → ranked shortlist
+  (`run`, `search`)
+- Strict structured job analysis (`analyze`) via a local LLM (`Ollama`, GPU
+  priority on every request)
+- Provenance-validated resume tailoring (`tailor`) with one repair retry and a
+  deterministic safe fallback; versioned in SQLite
+- Application packets (`apply-prep`): resume + cover letter + answers + job
+  evidence, unknown fields flagged for you
+- Human-in-the-loop browser assistant (`apply`): fills safe fields, selects your
+  packet files, stops at a review screen — submits nothing
+- SQLite memory (`data/job_agent.db`) and a 472-test pytest suite
+
 ## Architecture
 
 Two independent provider layers, selected by configuration:
